@@ -38,6 +38,18 @@ function Get-SprintPilotSession($paths, [int]$Port) {
     if (!(Test-Path $file)) { return $null }
     try { return Get-Content $file -Raw | ConvertFrom-Json } catch { return $null }
 }
+function Test-SprintPilotProcessImage([string]$ExecutablePath, [string]$CommandLine, [string]$Publish) {
+    if ([string]::IsNullOrWhiteSpace($ExecutablePath)) { return $false }
+    $actual = [IO.Path]::GetFullPath($ExecutablePath)
+    $exe = [IO.Path]::GetFullPath((Join-Path $Publish 'SprintPilot.Web.exe'))
+    if ($actual.Equals($exe, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    if ([IO.Path]::GetFileName($actual) -ine 'dotnet.exe') { return $false }
+    # The launcher passes an absolute, quoted DLL as the first dotnet argument.
+    # Match that argument exactly, not a path embedded in another argument.
+    $dll = [IO.Path]::GetFullPath((Join-Path $Publish 'SprintPilot.Web.dll'))
+    $pattern = '^\s*(?:"[^"]+"|[^\s"]+)\s+(?:"' + [regex]::Escape($dll) + '"|' + [regex]::Escape($dll) + ')(?:\s|$)'
+    return [regex]::IsMatch($CommandLine, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+}
 function Assert-SprintPilotProcess($session, $health, $paths) {
     if ($null -eq $session -or $null -eq $health -or $health.application -ne 'SprintPilot' -or $health.processId -ne $session.ProcessId) { throw 'This port is not owned by a verified SprintPilot session. Choose another port with Setup-SprintPilot.ps1 -Port 5272.' }
     $expected = [IO.Path]::GetFullPath($paths.Publish).TrimEnd('\')
@@ -46,7 +58,10 @@ function Assert-SprintPilotProcess($session, $health, $paths) {
     $recorded = [DateTime]::Parse($session.StartTime).ToUniversalTime()
     if ([Math]::Abs(($process.StartTime.ToUniversalTime() - $recorded).TotalSeconds) -gt 1) { throw 'Session process ID has been reused. Refusing to control this process.' }
     $command = Get-CimInstance Win32_Process -Filter "ProcessId = $($session.ProcessId)"
-    $dll = Join-Path $paths.Publish 'SprintPilot.Web.dll'
-    if ($command.CommandLine -notlike "*$dll*") { throw 'Process command line does not match this SprintPilot application.' }
+    $image = $command.ExecutablePath
+    if ([string]::IsNullOrWhiteSpace($image)) { $image = $process.Path }
+    if (!(Test-SprintPilotProcessImage $image $command.CommandLine $paths.Publish)) {
+        throw 'Cannot verify the running SprintPilot executable. Close the terminal that originally started SprintPilot, then use Open-SprintPilot.cmd.'
+    }
     return $process
 }

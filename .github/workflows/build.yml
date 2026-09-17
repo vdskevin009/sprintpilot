@@ -26,8 +26,12 @@ jobs:
       - name: Check launcher permissions in Windows PowerShell 5.1
         if: runner.os == 'Windows'
         shell: powershell
-        run: ./scripts/Test-LauncherPermissions.ps1
+        run: |
+          ./scripts/Test-LauncherPermissions.ps1
+          ./scripts/Test-LauncherProcess.ps1
       - name: Check launcher permissions in PowerShell 7
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/Test-LauncherPermissions.ps1
+        run: |
+          ./scripts/Test-LauncherPermissions.ps1
+          ./scripts/Test-LauncherProcess.ps1
