@@ -1,0 +1,21 @@
+using SprintPilot.Application;
+using SprintPilot.Domain;
+namespace SprintPilot.Infrastructure;
+public sealed class DemoTracker:IWorkTracker {
+ readonly Dictionary<int,WorkItem> items=new();readonly Metadata metadata;readonly object sync=new();
+ public DemoTracker(){var today=DateTimeOffset.UtcNow.Date;var monday=today.AddDays(-((int)today.DayOfWeek+6)%7);var iterations=Enumerable.Range(-1,3).Select(i=>new Iteration((i+2).ToString(),$"Sprint {18+i}",$"SprintPilot\\Sprint {18+i}",monday.AddDays(i*14),monday.AddDays(i*14+13))).ToArray();
+  Person[] people=[new("kevin","Kevin","kevin@example.test"),new("johan","Johan","johan@example.test"),new("piotr","Piotr","piotr@example.test"),new("bea","Bea","bea@example.test")];
+  string[] fields=["System.Title","System.AssignedTo","System.State","System.IterationPath","System.AreaPath","Microsoft.VSTS.Scheduling.StoryPoints","Microsoft.VSTS.Common.Priority","System.Tags","System.Description","Microsoft.VSTS.Common.AcceptanceCriteria"];
+  metadata=new([new("demo","Platform team")],people,iterations,["SprintPilot\\Platform","SprintPilot\\Experience"],[..new[]{"Product Backlog Item","Bug","Task"}.Select(n=>new TypeDefinition(n,[new("New","Proposed"),new("Active","InProgress"),new("Resolved","Resolved"),new("Closed","Completed")],fields,"Microsoft.VSTS.Scheduling.StoryPoints"))],[new("SprintPilot",true)],people[0]);
+  string[] titles=["Pablo API timeout handling","CNX migration validation","Automate DR deployment pipeline","FrontCare account recovery","Review database failover alerts","Improve claim search latency","Document rollback procedure","Add migration failure notification","Handle duplicate queue messages","Review API contract changes","Verify session expiry behavior","Clean up obsolete feature flags"];
+  for(int i=0;i<titles.Length;i++){var owner=people[i%4];items[5210+i]=new(){Id=5210+i,Revision=1,Title=titles[i],Type=i%4==0?"Bug":"Product Backlog Item",Owner=i%5==0?"":owner.Name,OwnerId=i%5==0?"":owner.Id,State=i%4==0?"New":i%4==3?"Closed":"Active",Iteration=iterations[i<9?1:0].Path,Area=metadata.Areas[i%2],Estimate=i%3==0?null:i%5+1,Priority=i%3+1,Parent=i%4==0?null:5000,Tags=i%3==0?[]:[i%2==0?"API":"DR","Platform"],Changed=DateTimeOffset.UtcNow.AddDays(-i*2),Description="<p>Improve the reliability of this workflow. Preserve existing behavior and document the operational impact.</p>",Acceptance="<p>Given a valid request, when the workflow completes, then the expected result is available.</p><p>Testing: cover success and failure paths.</p>"};}
+  foreach(var item in PlanningExample.Create(DateOnly.FromDateTime(DateTime.Now)).Items)items[item.Id]=item;
+ }
+ public Task<Person> TestAsync(Credentials c,CancellationToken ct=default)=>Task.FromResult(metadata.Me);
+ public Task<Metadata> MetadataAsync(bool refresh=false,CancellationToken ct=default)=>Task.FromResult(metadata);
+ public Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){lock(sync)return Task.FromResult<IReadOnlyList<WorkItem>>(items.Values.Where(i=>i.Iteration==iteration).ToArray());}
+ public Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default){lock(sync)return Task.FromResult<IReadOnlyList<WorkItem>>(items.Values.Where(w=>types.Contains(w.Type)).ToArray());}
+ public Task<WorkItem> GetAsync(int id,CancellationToken ct=default){lock(sync)return Task.FromResult(items.GetValueOrDefault(id)??throw new TrackerException("Demo item not found."));}
+ public Task<WorkItem> UpdateAsync(ItemUpdate u,CancellationToken ct=default){lock(sync){if(items[u.Original.Id].Revision!=u.Original.Revision)throw new TrackerException("Revision conflict. Refresh before retrying.");var item=ItemChanges.Apply(u.Original,u.Changes,metadata) with{Revision=u.Original.Revision+1,Changed=DateTimeOffset.UtcNow};items[item.Id]=item;return Task.FromResult(item);}}
+ public Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default){lock(sync){var item=ItemChanges.Apply(new(){Id=items.Keys.Max()+1,Revision=1,Type=type,State="New",Parent=parent,Changed=DateTimeOffset.UtcNow},changes,metadata);items[item.Id]=item;return Task.FromResult(item);}}
+}

@@ -1,0 +1,33 @@
+using SprintPilot.Domain;
+namespace SprintPilot.Application;
+public interface ICredentialStore {
+ ValueTask<Credentials?> GetAsync(CancellationToken ct=default);
+ ValueTask SaveAsync(Credentials credentials,CancellationToken ct=default);
+}
+public interface IPreferencesStore {
+ Task<Preferences> LoadAsync(CancellationToken ct=default);
+ Task SaveAsync(Preferences preferences,CancellationToken ct=default);
+}
+public interface IWorkTracker {
+ Task<Person> TestAsync(Credentials credentials,CancellationToken ct=default);
+ Task<Metadata> MetadataAsync(bool refresh=false,CancellationToken ct=default);
+ Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default);
+ Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default);
+ Task<WorkItem> GetAsync(int id,CancellationToken ct=default);
+ Task<WorkItem> UpdateAsync(ItemUpdate update,CancellationToken ct=default);
+ Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default);
+}
+public sealed class TrackerException(string message):Exception(message);
+public sealed class BulkEditor(IWorkTracker tracker) {
+ public async Task<IReadOnlyList<UpdateResult>> ApplyAsync(IEnumerable<ItemUpdate> updates,IProgress<UpdateResult>? progress=null,CancellationToken ct=default) {
+  var result=new System.Collections.Concurrent.ConcurrentBag<UpdateResult>();
+  await Parallel.ForEachAsync(updates,new ParallelOptions{MaxDegreeOfParallelism=4,CancellationToken=ct},async (u,token)=>{
+   UpdateResult row;
+   try {row=new(u.Original.Id,await tracker.UpdateAsync(u,token),null);}
+   catch(TrackerException ex){row=new(u.Original.Id,null,ex.Message);}
+   catch(OperationCanceledException){row=new(u.Original.Id,null,"Cancelled or timed out. Refresh before retrying; server outcome may be unknown.");}
+   catch {row=new(u.Original.Id,null,"Update could not be confirmed. Refresh before retrying.");}
+   result.Add(row);progress?.Report(row);
+  });return result.OrderBy(x=>x.Id).ToArray();
+ }
+}

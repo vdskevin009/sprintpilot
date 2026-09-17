@@ -1,0 +1,95 @@
+@page "/"
+@implements IAsyncDisposable
+@inject TrackerSession Tracker
+@inject ICredentialStore Credentials
+@inject IPreferencesStore Preferences
+@inject BulkEditor Bulk
+@inject IJSRuntime JS
+
+<div class="app-shell">
+<aside class="rail"><a class="brand" href="/" aria-label="SprintPilot home"><img src="icon.svg" alt=""/>SprintPilot</a>
+<div class="workspace-label">Workspace</div>
+<button class="nav-button @(screen=="workspace"?"active":"")" @onclick='()=>SetScreen("workspace")'>▦ Sprint workspace</button>
+<button class="nav-button @(screen=="cleanup"?"active":"")" disabled="@(meta is null)" @onclick="OpenCleanup">◷ Sprint cleanup</button>
+<button class="nav-button @(screen=="planning"?"active":"")" disabled="@(meta is null)" @onclick='()=>SetScreen("planning")'>▤ Planning overview</button>
+<div class="workspace-label">Saved views <button title="Save current view" disabled="@(meta is null)" @onclick='()=>Show("saveview")'>+</button></div>
+@foreach(var view in prefs.Views){<button class="nav-button" @onclick="()=>LoadView(view)">⌑ @view.Name</button>}
+<div class="rail-bottom"><button class="nav-button" @onclick='()=>SetScreen("settings")'>⚙ Settings</button><button class="nav-button" title="Command palette (Ctrl+K)" @onclick='()=>Show("palette")'>⌘ Commands <kbd>Ctrl K</kbd></button><div class="connection-dot">● @(Tracker.Demo?"Demo workspace":meta is null?"Not connected":"Azure DevOps connected")</div></div></aside>
+<main>
+<header class="topbar"><span>@(Tracker.Demo?"Demo / Platform team":connection is null?"Local workspace":connection.Organization+" / "+connection.Project)</span><span class="muted">@meta?.Me.Name</span></header>
+@if(Tracker.Demo){<div class="demo-banner">Demo mode — changes stay in this browser session. <button @onclick="ExitDemo">Connect Azure DevOps</button></div>}
+@if(message!=""){<div class="notice @(hasError?"error":"")" role="status">@message <button aria-label="Dismiss notification" @onclick="()=>message=string.Empty">×</button></div>}
+@if(initializing){<div class="empty"><h1>Opening SprintPilot…</h1></div>}
+else if(screen=="settings"){
+<section class="settings"><div class="page-heading"><div><h1>Settings</h1><p>Make SprintPilot work the way you do.</p></div><button class="primary" @onclick="SaveSettings">Save settings</button></div>
+<h2>Appearance</h2><label>Theme<select @bind="prefs.Theme" @bind:after="ApplyTheme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+<h2>Connection</h2><p>@(connection?.Organization??"No organization") / @(connection?.Project??"No project")</p><button @onclick="ChangeConnection">Change connection</button>
+@if(meta is not null&&!Tracker.Demo){<label>Team<select value="@connection?.Team" @onchange="ChangeTeam">@foreach(var t in meta.Teams){<option value="@t.Id">@t.Name</option>}</select></label>}
+<h2>AI review</h2><p>Copy prompts into your chosen AI tool, then paste its structured response back here.</p><label>Master instructions<textarea rows="14" @bind="prefs.AiPrompt"></textarea></label><button @onclick="()=>prefs.AiPrompt=AiReview.DefaultPrompt">Restore default prompt</button>
+<h2>Quality checklist</h2><p>A configurable heuristic, not an objective measure of work quality. Zero disables a rule.</p><div class="weights">@foreach(var key in prefs.QualityWeights.Keys.ToArray()){<label>@key<input type="number" min="0" max="100" @bind="prefs.QualityWeights[key]"/></label>}</div><label>Stale after this many days<input type="number" min="1" @bind="prefs.StaleDays"/></label>
+<h2>Work-item templates</h2><div class="toolbar"><select aria-label="Template to edit" @bind="templateIndex" @bind:after="LoadTemplate">@for(int i=0;i<prefs.Templates.Count;i++){<option value="@i">@prefs.Templates[i].Name</option>}</select><button @onclick="NewTemplate">+ Template</button><button @onclick="DeleteTemplate">Delete</button></div>
+<label>Name<input @bind="templateName"/></label><label>Description<textarea rows="5" @bind="templateDescription"></textarea></label><label>Acceptance criteria / testing<textarea rows="4" @bind="templateAcceptance"></textarea></label><label>Tags<input @bind="templateTags"/></label><label>Area<input @bind="templateArea"/></label><button @onclick="SaveTemplate">Update template</button>
+<h2>Saved views</h2>@foreach(var v in prefs.Views.ToArray()){<div class="toolbar">@v.Name<button @onclick="()=>DeleteView(v)">Delete</button></div>}
+</section>
+}
+else if(meta is null){
+<section class="welcome"><img src="icon.svg" alt=""/><h1>Welcome to SprintPilot</h1><p>Azure DevOps connection required.</p>
+<label>Organization<input placeholder="your-organization" @bind="organization" @bind:after="ResetTest"/></label><label>Project<input placeholder="Your project" @bind="project" @bind:after="ResetTest"/></label><label>Token<input id="pat" type="password" autocomplete="off" @oninput="TokenInput"/></label>
+<p class="muted">The token stays on this machine. On Windows, local saving uses Credential Manager.</p>
+<div class="toolbar"><button disabled="@connecting" @onclick="TestConnection">Test connection</button><button class="primary" disabled="@connecting" @onclick="SaveConnection">Save locally</button></div>
+@if(testUser is not null){<p class="success">✓ Connected as @testUser.Name</p>}
+<button class="text-button" @onclick="ExploreDemo">Explore with demo data</button></section>
+}
+else if(screen=="planning"){<PlanningPage @ref="planner" @key="PlanningProfileKey" Meta="meta" Preferences="prefs" ProfileKey="@PlanningProfileKey" OpenItem="OpenDetail"/>}
+else {
+<section class="workspace"><div class="page-heading"><div><div class="heading-context">@meta.Teams.FirstOrDefault(t=>t.Id==connection?.Team)?.Name</div><h1>@(screen=="cleanup"?"Sprint cleanup":"Sprint workspace")</h1></div><div class="toolbar"><button disabled="@loading" title="Refresh (R)" @onclick="Refresh">↻ Refresh</button><button class="primary" @onclick="NewItem">+ New work item</button></div></div>
+<div class="sprint-bar"><button title="Previous sprint (Alt+Left)" disabled="@(sprintIndex<=0||busy.Count>0)" @onclick="()=>Navigate(-1)">← @Adjacent(-1)</button><button class="current-sprint" @onclick='()=>Show("iterations")'>@CurrentSprint?.Name <span>⌄</span><small>@DateRange</small></button><button title="Next sprint (Alt+Right)" disabled="@(sprintIndex>=meta.Iterations.Length-1||busy.Count>0)" @onclick="()=>Navigate(1)">@Adjacent(1) →</button></div>
+<div class="view-tabs">@foreach(var v in QuickViews){<button class="@(quickView==v?"active":"")" @onclick="()=>SetQuickView(v)">@v</button>}<button class="prepare" @onclick="PrepareNext">Prepare next sprint →</button></div>
+@if(screen=="cleanup"){
+<div class="health"><h2>Where this sprint needs attention</h2><p>Checks cover loaded team work and the previous sprint. Linked children outside those sprints are fetched for the parent check.</p><div class="health-counts">@foreach(var group in CleanupCounts){<button class="@(cleanupFilter==group.Key?"active":"")" @onclick="()=>cleanupFilter=cleanupFilter==group.Key?string.Empty:group.Key"><strong>@group.Value</strong>@group.Key</button>}</div></div>}
+<div class="filter-bar"><input id="search" class="search" aria-label="Search work items" placeholder="Search ID, title, tags…  /" @bind="search" @bind:event="oninput"/>
+<select aria-label="Filter owner" @bind="ownerFilter"><option value="">All owners</option>@foreach(var p in meta.People){<option value="@p.Id">@p.Name</option>}</select>
+<select aria-label="Filter state" @bind="stateFilter"><option value="">All states</option>@foreach(var s in meta.Types.SelectMany(t=>t.States).Select(s=>s.Name).Distinct()){<option>@s</option>}</select>
+<select aria-label="Filter type" @bind="typeFilter"><option value="">All types</option>@foreach(var t in meta.Types){<option>@t.Name</option>}</select>
+<button @onclick="()=>moreFilters=!moreFilters">Filters @(moreFilters?"−":"+")</button><button @onclick='()=>Show("columns")'>Columns</button><button @onclick="ClearFilters">Clear</button></div>
+@if(moreFilters){<div class="filter-bar"><input aria-label="Filter tag" placeholder="Tag contains…" @bind="tagFilter" @bind:event="oninput"/><select aria-label="Filter area" @bind="areaFilter"><option value="">All areas</option>@foreach(var a in meta.Areas){<option>@a</option>}</select><select aria-label="Filter priority" @bind="priorityFilter"><option value="">All priorities</option>@for(int i=1;i<=4;i++){<option>@i</option>}</select><button @onclick='()=>Show("saveview")'>Save this view</button></div>}
+<div class="grid-status" aria-live="polite"><span>@Visible.Count work items @(loading?"· Refreshing…":"")</span><span>@(selected.Count>0?$"{selected.Count} selected ({selected.Count(id=>Visible.Any(w=>w.Id==id))} visible)":"Select items to edit in bulk")</span></div>
+<WorkGrid Items="Visible" Meta="meta" Columns="prefs.Columns" Selected="selected" Busy="busy" Drafts="drafts.Keys.ToHashSet()" SortedBy="sort" Descending="descending" Sort="Sort" Select="Select" SelectAll="ToggleAll" Open="OpenDetail" OpenParent="OpenById" Edit="InlineEdit"/>
+@if(selected.Count>0){<div class="bulk-bar"><strong>@selected.Count selected</strong><button @onclick='()=>StartBulk("Owner")'>Assign ⌄</button><button @onclick='()=>StartBulk("AddTag")'>+ Tag</button><button @onclick='()=>StartBulk("RemoveTag")'>Remove tag</button><button @onclick='()=>StartBulk("Previous")'>← Sprint</button><button @onclick='()=>StartBulk("Next")'>Sprint →</button><button @onclick='()=>StartBulk("Iteration")'>Choose sprint</button><button @onclick='()=>StartBulk("State")'>State ⌄</button><button @onclick='()=>StartBulk("Area")'>Area</button><button @onclick='()=>StartBulk("Priority")'>Priority</button><button @onclick="CopySelected">Copy for AI</button><button @onclick="PasteSelected">Paste AI review</button><button @onclick="selected.Clear">Clear</button></div>}
+</section>
+}
+</main></div>
+@if(detail is not null&&meta is not null){var shown=drafts.TryGetValue(detail.Id,out var draft)?ItemChanges.Apply(detail,draft.Changes,meta):detail;var quality=Quality.Evaluate(shown,prefs,AllLoaded);
+<aside class="detail-panel" role="dialog" aria-modal="false" aria-label="Work item details"><header><span>#@detail.Id · @detail.Type</span><button aria-label="Close details" @onclick="()=>detail=null">×</button></header><h2>@shown.Title</h2><div class="toolbar"><span class="pill">@detail.State</span><span>@(detail.Owner==""?"Unassigned":detail.Owner)</span></div><p class="muted">@detail.Iteration · revision @detail.Revision</p>
+@if(draft is not null){<div class="notice">Local AI draft — Azure DevOps is unchanged.</div><div class="toolbar"><button class="primary" @onclick="()=>ReviewDraft(detail.Id)">Review &amp; update Azure DevOps</button><button @onclick="()=>drafts.Remove(detail.Id)">Discard draft</button></div>}
+<h3>Description</h3><pre class="prose">@ContentText.Plain(shown.Description)</pre><h3>Acceptance criteria</h3><pre class="prose">@ContentText.Plain(shown.Acceptance)</pre><div class="tags">@foreach(var tag in shown.Tags){<span class="pill">@tag</span>}</div>
+@if(detail.Parent is {} parent){<p>Parent <button @onclick="()=>OpenById(parent)">#@parent</button></p>}
+<div class="quality"><h3>PBI quality <strong>@quality.Score / 100</strong></h3><p class="muted">Checklist heuristic. Review it in context.</p>@foreach(var check in quality.Checks.Where(c=>c.Weight>0)){<div class="@(check.Passed?"pass":"warn")">@(check.Passed?"✓":"⚠") @check.Name</div>}</div>
+<div class="toolbar"><button @onclick="()=>CopyItems([shown])">Copy for AI review</button><button @onclick="()=>PasteItems([detail])">Paste AI review</button></div>@if(SafeLink(detail.Url)){<a target="_blank" rel="noopener noreferrer" href="@detail.Url">Open in Azure DevOps ↗</a>}
+</aside>}
+@if(dialog!=""){
+<div class="scrim"><section class="dialog @(dialog is "ai" or "review"?"wide":"")" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><header><h2 id="dialog-title">@DialogTitle</h2><button disabled="@applying" aria-label="Close dialog" @onclick="CloseDialog">×</button></header>
+@if(dialog=="palette") {<input autofocus aria-label="Find command" placeholder="Type a command…" @bind="commandSearch" @bind:event="oninput"/><div class="command-list">@foreach(var command in Commands.Where(c=>c.Contains(commandSearch,StringComparison.OrdinalIgnoreCase))){<button @onclick="()=>RunCommand(command)">@command</button>}</div>}
+else if(dialog=="iterations") {<input aria-label="Search iterations" placeholder="Find sprint…" @bind="iterationSearch" @bind:event="oninput"/>@foreach(var i in meta!.Iterations.Where(i=>i.Path.Contains(iterationSearch,StringComparison.OrdinalIgnoreCase))){<button class="list-option" @onclick="()=>ChooseSprint(i)">@i.Name <small>@i.Path</small></button>}}
+else if(dialog=="columns") {<p>ID and title stay visible.</p>@foreach(var c in AllColumns){<label class="checkbox"><input type="checkbox" checked="@prefs.Columns.Contains(c)" disabled="@(c is "ID" or "Title")" @onchange="()=>ToggleColumn(c)"/>@c</label>}}
+else if(dialog=="saveview") {<label>View name<input @bind="viewName"/></label><button class="primary" @onclick="SaveView">Save view</button>}
+else if(dialog=="bulk") {
+<p>@selected.Count selected items, including any hidden by filters.</p><label>@BulkLabel
+@if(bulkKind=="Owner"){<select @bind="bulkValue"><option value="">Unassigned</option>@foreach(var p in meta!.People){<option value="@p.UniqueName">@p.Name</option>}</select>}
+else if(bulkKind=="State"){<select @bind="bulkValue"><option value="">Choose state…</option>@foreach(var s in CommonStates){<option>@s</option>}</select>}
+else if(bulkKind is "Iteration" or "Next" or "Previous"){<select @bind="bulkValue"><option value="">Choose sprint…</option>@foreach(var i in meta!.Iterations){<option value="@i.Path">@i.Name</option>}</select>}
+else if(bulkKind=="Area"){<select @bind="bulkValue"><option value="">Choose area…</option>@foreach(var a in meta!.Areas){<option>@a</option>}</select>}
+else {<input @bind="bulkValue" placeholder="@(bulkKind=="Priority"?"1–4":"Tag")"/>}</label><button class="primary" @onclick="PreviewBulk">Review changes</button>}
+else if(dialog=="review") {
+<p>@pending.Count work items will be changed. Every update checks the original revision.</p><div class="review-scroll">@foreach(var u in pending){<article class="review-item"><h3>#@u.Original.Id — @u.Original.Title</h3><table class="diff"><thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead><tbody>@foreach(var c in u.Changes){<tr><th>@c.Field</th><td><pre>@Display(u.Original,c.Field)</pre></td><td><pre>@ContentText.Plain(c.Value?.ToString()??"(empty)")</pre></td></tr>}</tbody></table></article>}</div>
+@if(results.Count>0){<div class="notice" role="status">✓ @results.Count(r=>r.Success) updated · ⚠ @results.Count(r=>!r.Success) failed</div>@foreach(var failure in results.Where(r=>!r.Success)){<p class="error-text">#@failure.Id — @failure.Error</p>}}
+<div class="toolbar"><button disabled="@applying" @onclick="CloseDialog">@(results.Count>0?"Close":"Cancel")</button>@if(results.Count==0){<button class="primary" disabled="@applying" @onclick="ApplyPending">@(applying?"Updating…":$"Apply {pending.Count} changes")</button>}else if(results.Any(r=>!r.Success)){<button class="primary" disabled="@applying" @onclick="RetryFailed">Refresh failed &amp; review retry</button>}</div>}
+else if(dialog=="ai") {
+@if(reviews.Length==0){<p>Paste the complete standardized response for @aiItems.Length item(s).</p><textarea aria-label="AI review response" rows="16" @bind="aiText"></textarea><button class="primary" @onclick="ParseAi">Preview review</button>}
+else {<div class="review-scroll">@foreach(var review in reviews){var original=aiItems.Single(w=>w.Id==review.Id);<article class="review-item"><h3>#@review.Id — @original.Title</h3>@foreach(var c in ReviewChanges(review)){<h4>@c.Field</h4><div class="diff-pair"><div><small>Current</small><pre>@Display(original,c.Field)</pre></div><div><small>Proposed</small><pre>@ContentText.Plain(c.Value?.ToString()??"")</pre></div></div>}<h4>Questions / missing information</h4><pre class="prose">@review.Sections["QUESTIONS / MISSING INFORMATION"]</pre></article>}</div><div class="toolbar"><button @onclick="()=>reviews=[]">Back</button><button @onclick="ApplyAiLocally">Apply locally</button><button class="primary" @onclick="ReviewAiServer">Review Azure DevOps update</button></div>}}
+else if(dialog=="create") {
+<label>Work-item type<select @bind="newType">@foreach(var t in meta!.Types){<option>@t.Name</option>}</select></label><label>Template<select @onchange="ApplyCreateTemplate"><option value="">Blank</option>@for(int i=0;i<prefs.Templates.Count;i++){<option value="@i">@prefs.Templates[i].Name</option>}</select></label><label>Title<input @bind="newTitle"/></label><label>Description<textarea rows="5" @bind="newDescription"></textarea></label><label>Acceptance criteria / testing<textarea rows="4" @bind="newAcceptance"></textarea></label>@if(!meta!.Types.First(t=>t.Name==newType).Fields.Contains("Microsoft.VSTS.Common.AcceptanceCriteria")){<p class="muted">This type has no acceptance-criteria field. These criteria will be included in its description.</p>}<label>Area<select @bind="newArea">@foreach(var a in meta!.Areas){<option>@a</option>}</select></label><label>Sprint<select @bind="newIteration">@foreach(var i in meta!.Iterations){<option value="@i.Path">@i.Name</option>}</select></label><label>Parent ID (optional)<input type="number" min="1" @bind="newParent"/></label><label>Tags<input @bind="newTags"/></label><button class="primary" disabled="@applying" @onclick="CreateItem">@(applying?"Creating…":"Create work item")</button>
+}
+@if(dialogError!=""){<p class="error-text" role="alert">@dialogError</p>}
+</section></div>}
+<div id="blazor-error-ui">SprintPilot lost its connection. <a href="/">Reload</a> to reconnect; refresh work items before retrying a change.</div>

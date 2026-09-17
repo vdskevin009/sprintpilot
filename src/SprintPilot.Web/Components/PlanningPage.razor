@@ -1,0 +1,132 @@
+@implements IDisposable
+@inject TrackerSession Tracker
+@inject IPreferencesStore Store
+<section class="planning-page">
+<div class="page-heading"><div><div class="heading-context">Plan work without creating tasks</div><h1>Planning overview</h1></div><div class="toolbar"><button disabled="@loading" @onclick="RefreshPlanning">↻ Refresh planning</button><button @onclick="EditSettings">Planning settings</button></div></div>
+@if(error != ""){<div class="notice error" role="alert">@error</div>}
+@if(loading){<p role="status">Loading team backlog and sprints…</p>}
+@if(snapshot is not null)
+{
+    <p class="planning-updated">@AsOf.ToString("ddd, MMM d, yyyy") · refreshed @snapshot.LoadedAt.ToLocalTime().ToString("HH:mm") · @(Tracker.Demo ? "Sample data" : "Azure DevOps")</p>
+    <PlanningDashboard Snapshot="snapshot" Settings="settings" Selected="horizon" PeriodChanged="SelectPeriod" ApplicationTags="applicationTags" InitiativeTags="initiativeTags" TagToggled="ToggleTag" TagsCleared="ClearTags" DrillDown="ShowItems" />
+}
+@if(drillItems is not null)
+{
+    <section class="planning-drill" aria-label="Workload details"><header><h2>@drillLabel · @drillItems.Length items</h2><button @onclick="() => drillItems = null">Close items</button></header>
+    <div class="planning-table-wrap"><table><thead><tr><th>ID</th><th>Work item</th><th>Owner</th><th>Sprint</th><th>Full estimate</th><th>Tags</th></tr></thead><tbody>
+    @foreach(var item in drillItems){<tr><td>#@item.Id</td><td><button class="title-button" @onclick="() => OpenItem.InvokeAsync(item)">@item.Title</button></td><td>@(item.Owner == "" ? "Unassigned" : item.Owner)</td><td>@item.Iteration</td><td>@(Planning.Estimate(item, settings)?.ToString("0.#") ?? "Not estimated")</td><td>@string.Join("; ", item.Tags)</td></tr>}
+    </tbody></table></div><p>These are the full item estimates. Split chart contributions may be smaller. Open an item for details.</p></section>
+}
+@if(editing)
+{
+<section class="planning-config" aria-label="Planning settings"><header><div><h2>Planning settings</h2><p>Local to this organization, project and team. Azure DevOps tags are unchanged.</p></div><button @onclick="() => editing = false">Cancel</button></header>
+<h3>What work should be counted?</h3><div class="planning-checkboxes">@foreach(var type in Meta.Types.Where(t => t.Name != "Task")){<label class="checkbox"><input type="checkbox" checked="@draft.Types.Contains(type.Name)" @onchange="() => ToggleType(type.Name)"/>@type.Name</label>}</div>
+<h3>Estimate units</h3><p>Choose the estimate field for each type. Only select hour-based fields if you want the 50–60 hour comparison.</p>
+@foreach(var type in Meta.Types.Where(t => draft.Types.Contains(t.Name)))
+{<label>@type.Name<select value="@draft.EstimateFields.GetValueOrDefault(type.Name, "")" @onchange="e => SetField(type.Name, e.Value?.ToString() ?? string.Empty)"><option value="">Default: @(type.EstimateField ?? "No supported estimate field")</option>@foreach(var field in NumericChoices(type)){<option>@field</option>}</select></label>}
+<label class="checkbox"><input type="checkbox" @bind="draft.EstimatesAreHours"/>I confirm the selected estimate values are hours for all selected types.</label>
+<h3>Classify Azure DevOps tags</h3><div class="toolbar"><input list="planning-known-tags" aria-label="Tag name" placeholder="Select or enter a tag" @bind="newTag"/><datalist id="planning-known-tags">@foreach(var tag in allItems.SelectMany(w => w.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order()){<option value="@tag"/>}</datalist><button @onclick="AddTag">Add tag</button></div>
+<div class="planning-table-wrap"><table><thead><tr><th>Tag</th><th>Application</th><th>Initiative</th><th></th></tr></thead><tbody>
+@foreach(var tag in draft.Tags.ToArray())
+{<tr><th>@tag.Tag</th><td><input type="checkbox" aria-label="@($"{tag.Tag} is an application")" checked="@tag.Application" @onchange="e => Classify(tag.Tag, true, e.Value is true)"/></td><td><input type="checkbox" aria-label="@($"{tag.Tag} is an initiative")" checked="@tag.Initiative" @onchange="e => Classify(tag.Tag, false, e.Value is true)"/></td><td><button @onclick="() => draft.Tags.RemoveAll(t => t.Tag == tag.Tag)">Remove classification</button></td></tr>}
+</tbody></table></div>
+<label>Items with multiple tags in one dimension<select @bind="draft.Allocation"><option value="@TagAllocation.SplitEvenly">Split estimate equally — additive chart totals</option><option value="@TagAllocation.FullMembership">Full estimate on every tag — overlapping chart totals</option></select></label>
+<h3>Capacity targets per sprint</h3><div class="planning-target-inputs"><label>Default minimum (h)<input type="number" min="0" step="0.5" value="@draft.DefaultTarget.Minimum" @onchange="e => SetDefault(e, true)"/></label><label>Default maximum (h)<input type="number" min="0" step="0.5" value="@draft.DefaultTarget.Maximum" @onchange="e => SetDefault(e, false)"/></label></div>
+<p>Targets are planning ranges, not performance scores. Adjust individual sprints for leave, support or other commitments. Zero is valid for someone unavailable.</p>
+@if(snapshot is not null){<div class="planning-table-wrap"><table><thead><tr><th>Person</th><th>Sprint</th><th>Minimum h</th><th>Maximum h</th><th></th></tr></thead><tbody>
+@foreach(var person in Meta.People){@foreach(var sprint in new[] { snapshot.Current, snapshot.Next }.OfType<Iteration>()){
+var key = PlanningSettings.CapacityKey(person.Id, sprint.Id); var target = draft.CapacityOverrides.GetValueOrDefault(key, draft.DefaultTarget);
+<tr><th>@person.Name</th><td>@sprint.Name</td><td><input aria-label="@($"{person.Name} {sprint.Name} minimum")" type="number" min="0" step="0.5" value="@target.Minimum" @onchange="e => SetOverride(key, e, true)"/></td><td><input aria-label="@($"{person.Name} {sprint.Name} maximum")" type="number" min="0" step="0.5" value="@target.Maximum" @onchange="e => SetOverride(key, e, false)"/></td><td><button @onclick="() => draft.CapacityOverrides.Remove(key)">Use default</button></td></tr>
+}}
+</tbody></table></div>}
+<button class="primary" disabled="@loading" @onclick="SavePlanning">Save planning settings</button>
+@if(configError != ""){<p class="error-text" role="alert">@configError</p>}
+</section>
+}
+</section>
+@code {
+    [Parameter, EditorRequired] public Metadata Meta { get; set; } = default!;
+    [Parameter, EditorRequired] public Preferences Preferences { get; set; } = default!;
+    [Parameter, EditorRequired] public string ProfileKey { get; set; } = "";
+    [Parameter] public EventCallback<WorkItem> OpenItem { get; set; }
+    PlanningSettings settings = new(), draft = new();
+    PlanningSnapshot? snapshot;
+    List<WorkItem> allItems = [];
+    WorkItem[]? drillItems;
+    string drillLabel = "", newTag = "", error = "", configError = "";
+    bool loading, editing;
+    DateOnly AsOf = DateOnly.FromDateTime(DateTime.Now);
+    PlanningHorizon horizon;
+    HashSet<string> applicationTags = new(StringComparer.OrdinalIgnoreCase), initiativeTags = new(StringComparer.OrdinalIgnoreCase);
+    readonly CancellationTokenSource lifetime = new();
+    static T Clone<T>(T value) => System.Text.Json.JsonSerializer.Deserialize<T>(System.Text.Json.JsonSerializer.Serialize(value))!;
+    protected override async Task OnInitializedAsync()
+    {
+        settings = Preferences.PlanningProfiles.TryGetValue(ProfileKey, out var saved) ? Clone(saved) : new();
+        settings.Types = settings.Types.Where(t => Meta.Types.Any(m => m.Name == t)).ToArray();
+        if(Tracker.Demo && !Preferences.PlanningProfiles.ContainsKey(ProfileKey)) settings = SprintPilot.Infrastructure.PlanningExample.Settings();
+        editing = settings.Tags.Count == 0;
+        draft = Clone(settings);
+        await RefreshPlanning();
+    }
+    public async Task RefreshPlanning()
+    {
+        if(loading) return;
+        loading = true; error = "";
+        try
+        {
+            var rows = await Tracker.PlanningAsync(settings.Types, lifetime.Token);
+            lifetime.Token.ThrowIfCancellationRequested();
+            AsOf = DateOnly.FromDateTime(DateTime.Now);
+            var next = Planning.Build(rows, Meta, settings, AsOf, DateTimeOffset.Now);
+            allItems = rows.ToList(); snapshot = next; drillItems = null;
+        }
+        catch(OperationCanceledException) { if(!lifetime.IsCancellationRequested) error = "Planning timed out. Refresh to try again."; }
+        catch(Exception e) { error = (snapshot is null ? "" : "Showing the previous snapshot. ") + Safe(e); }
+        finally { loading = false; }
+    }
+    static string Safe(Exception e) => e is TrackerException ? e.Message : "Planning could not be loaded. Check the Azure DevOps connection and try again.";
+    void SelectPeriod(PlanningHorizon value) { horizon = value; drillItems = null; }
+    void ToggleTag((TagDimension Dimension, string Tag) value)
+    {
+        var set = value.Dimension == TagDimension.Application ? applicationTags : initiativeTags;
+        if(!set.Add(value.Tag)) set.Remove(value.Tag);
+        drillItems = null;
+    }
+    void ClearTags(TagDimension dimension) => (dimension == TagDimension.Application ? applicationTags : initiativeTags).Clear();
+    void ShowItems((string Label, int[] Ids) value) { drillLabel = value.Label; var ids = value.Ids.ToHashSet(); drillItems = allItems.Where(w => ids.Contains(w.Id)).ToArray(); }
+    void EditSettings() { draft = Clone(settings); editing = true; configError = ""; }
+    void ToggleType(string name) => draft.Types = draft.Types.Contains(name) ? draft.Types.Where(t => t != name).ToArray() : [..draft.Types, name];
+    IEnumerable<string> NumericChoices(TypeDefinition type) => allItems.Where(w => w.Type == type.Name).SelectMany(w => w.NumericFields.Keys).Concat(new[] { type.EstimateField ?? "" }).Where(f => f != "" && type.Fields.Contains(f)).Distinct().Order();
+    void SetField(string type, string field) { draft.EstimateFields[type] = field; draft.EstimatesAreHours = false; }
+    void AddTag()
+    {
+        var tag = newTag.Trim(); if(tag == "") return;
+        if(draft.Tags.Any(t => t.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase))) { configError = "That tag is already listed."; return; }
+        draft.Tags.Add(new(tag, false, false)); newTag = ""; configError = "";
+    }
+    void Classify(string tag, bool app, bool enabled) { var index = draft.Tags.FindIndex(t => t.Tag == tag); var old = draft.Tags[index]; draft.Tags[index] = app ? old with { Application = enabled } : old with { Initiative = enabled }; }
+    static double ParseHours(ChangeEventArgs e) => double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var n) ? n : double.NaN;
+    void SetDefault(ChangeEventArgs e, bool min) => draft.DefaultTarget = min ? draft.DefaultTarget with { Minimum = ParseHours(e) } : draft.DefaultTarget with { Maximum = ParseHours(e) };
+    void SetOverride(string key, ChangeEventArgs e, bool min) { var t = draft.CapacityOverrides.GetValueOrDefault(key, draft.DefaultTarget); draft.CapacityOverrides[key] = min ? t with { Minimum = ParseHours(e) } : t with { Maximum = ParseHours(e) }; }
+    async Task SavePlanning()
+    {
+        if(loading) return; loading = true; configError = "";
+        try
+        {
+            Planning.Validate(draft);
+            var rows = await Tracker.PlanningAsync(draft.Types, lifetime.Token);
+            lifetime.Token.ThrowIfCancellationRequested();
+            var next = Planning.Build(rows, Meta, draft, AsOf, DateTimeOffset.Now);
+            // Only persist after a complete successful read. Failure retains the previous dashboard.
+            var old = Preferences.PlanningProfiles.GetValueOrDefault(ProfileKey);
+            Preferences.PlanningProfiles[ProfileKey] = Clone(draft);
+            try { await Store.SaveAsync(Preferences, lifetime.Token); }
+            catch { if(old is null) Preferences.PlanningProfiles.Remove(ProfileKey); else Preferences.PlanningProfiles[ProfileKey] = old; throw; }
+            settings = Clone(draft); allItems = rows.ToList(); snapshot = next; editing = false; drillItems = null; applicationTags.Clear(); initiativeTags.Clear();
+        }
+        catch(Exception e) { configError = Safe(e); }
+        finally { loading = false; }
+    }
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

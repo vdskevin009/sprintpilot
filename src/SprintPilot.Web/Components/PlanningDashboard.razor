@@ -1,0 +1,80 @@
+@using SprintPilot.Application
+<div class="planning-dashboard">
+<div class="planning-periods" aria-label="Planning horizons">
+@foreach (var period in Snapshot.Periods)
+{
+    <button data-horizon="@period.Horizon" class="period-choice @(Selected == period.Horizon ? "chosen" : "")" aria-pressed="@(Selected == period.Horizon)" @onclick="() => PeriodChanged.InvokeAsync(period.Horizon)">
+        <span>@period.Label</span><strong>@Number(period.KnownEstimate) <small>@Unit</small></strong>
+        <span>@period.Items.Length items · @period.MissingEstimates unestimated</span><small>@period.Detail</small>
+    </button>
+}
+</div>
+<p class="planning-explanation">Open backlog items and bugs only. Each item is counted once in Total. Horizons overlap; do not add them together. Values are whole-item estimates, not timesheets or remaining hours.</p>
+@if (Selected == PlanningHorizon.NextWeek)
+{<p class="planning-caveat">Next week includes the full estimates of open items in sprints overlapping @Snapshot.NextWeekStart.ToString("MMM d")–@Snapshot.NextWeekStart.AddDays(6).ToString("MMM d"). No daily allocation or prorating is inferred.</p>}
+@if (!Settings.EstimatesAreHours)
+{<p class="planning-caveat">Estimates are shown as effort units. Confirm their unit in Planning settings before comparing workloads with hour targets. Different estimate scales must not be mixed.</p>}
+@if (Snapshot.UnknownStates > 0)
+{<p class="planning-caveat">@Snapshot.UnknownStates items have unrecognized states and are included as open. Review these items before relying on totals.</p>}
+@foreach (var dimension in new[] { TagDimension.Application, TagDimension.Initiative })
+{
+    var rows = Planning.Distribution(Period, Settings, dimension);
+    var activeTags = dimension == TagDimension.Application ? ApplicationTags : InitiativeTags;
+    var visibleRows = rows.Where(row => activeTags.Count == 0 || activeTags.Contains(row.Tag)).ToArray();
+    var maximum = Math.Max(1, rows.Max(row => row.Effort));
+    <section class="planning-chart" aria-label="@dimension workload">
+    <header><div><h2>@(dimension == TagDimension.Application ? "Applications" : "Initiatives")</h2><p>@Period.Label · @Number(Period.KnownEstimate) @Unit in @Period.Items.Length unique items</p></div><span class="planning-method">@(Settings.Allocation == TagAllocation.SplitEvenly ? "Shared estimates split equally" : "Full membership · rows overlap")</span></header>
+    <div class="planning-tag-filters" aria-label="Filter @dimension tags">
+    @foreach (var row in rows)
+    {<button aria-pressed="@(activeTags.Count == 0 || activeTags.Contains(row.Tag))" @onclick="() => TagToggled.InvokeAsync((dimension, row.Tag))">@row.Tag</button>}
+    <button class="clear-tags" @onclick="() => TagsCleared.InvokeAsync(dimension)">Show all</button>
+    </div>
+    <div class="planning-bars">
+    @foreach (var row in visibleRows)
+    {
+        <button data-ids="@string.Join(',', row.ItemIds)" data-label="@row.Tag" class="planning-bar-row" @onclick="() => DrillDown.InvokeAsync((row.Tag, row.ItemIds))" aria-label="@($"{row.Tag}: {Number(row.Effort)} {Unit}, {row.ItemIds.Length} linked items, {row.MissingEstimates} unestimated. View items.")">
+            <span class="planning-bar-label">@row.Tag</span><span class="planning-track"><span class="planning-fill @(dimension == TagDimension.Initiative ? "initiative" : "") @(row.Unclassified ? "unclassified" : "")" style="width:@Percent(row.Effort / maximum)"></span></span>
+            <strong>@Number(row.Effort) <small>@Unit</small></strong><span class="planning-row-count">@row.ItemIds.Length items @if(row.MissingEstimates > 0){<small>· @row.MissingEstimates unestimated</small>}</span>
+        </button>
+    }
+    </div>
+    <p class="planning-footnote">@(Settings.Allocation == TagAllocation.SplitEvenly ? "An item's estimate is split across all its matching tags within this dimension; filtering does not reallocate it. Item counts can overlap." : "An item's full estimate appears under every matching tag. Row values and counts must not be summed.") Applications and initiatives are separate views of the same work.</p>
+    </section>
+}
+<section class="planning-people"><header><div><h2>People &amp; capacity</h2><p>All open work, independent of chart filters · targets per person, per sprint</p></div><span class="planning-method">Default @Number(Settings.DefaultTarget.Minimum)–@Number(Settings.DefaultTarget.Maximum) h / sprint</span></header>
+<div class="planning-table-wrap"><table><thead><tr><th>Person</th><th>Current sprint <small>@Snapshot.Current?.Name</small></th><th>Next sprint <small>@Snapshot.Next?.Name</small></th></tr></thead><tbody>
+@foreach (var person in Snapshot.People)
+{
+    <tr><th>@person.Name @if(!person.TeamMember && person.Id != ""){<small>Outside selected team / unresolved identity</small>}</th>
+    @foreach (var workload in new[] { person.Current, person.Next })
+    {
+        var max = Math.Max(1, Math.Max(workload.Target.Maximum * 1.25, workload.Effort));
+        <td><button data-ids="@string.Join(',', workload.ItemIds)" data-label="@person.Name" class="capacity-cell" @onclick="() => DrillDown.InvokeAsync((person.Name, workload.ItemIds))">
+            <span class="capacity-summary"><strong>@Number(workload.Effort) @Unit</strong><span>@workload.Count items</span></span>
+            @if(Settings.EstimatesAreHours && person.Id != "")
+            {<span class="capacity-track"><span class="capacity-band" style="left:@Percent(workload.Target.Minimum / max);width:@Percent((workload.Target.Maximum - workload.Target.Minimum) / max)"></span><span class="capacity-fill @(workload.Status == "Above target" ? "over" : "")" style="width:@Percent(workload.Effort / max)"></span><span class="capacity-limit" style="left:@Percent(workload.Target.Maximum / max)"></span></span>}
+            <span class="capacity-caption"><span>@workload.Status</span>@if(Settings.EstimatesAreHours && person.Id != ""){<span>Target @Number(workload.Target.Minimum)–@Number(workload.Target.Maximum) h</span>}</span>
+            @if(workload.MissingEstimates > 0){<small>@workload.MissingEstimates unestimated — workload is incomplete</small>}
+        </button></td>
+    }
+    </tr>
+}
+</tbody></table></div>
+<p class="planning-footnote">Zero-work team members remain visible. Missing estimates never become “free capacity.” @Snapshot.UnscheduledCount items use iteration paths outside the team's configured sprint list; they are included in Backlog and Total.</p>
+</section>
+</div>
+@code {
+    [Parameter, EditorRequired] public PlanningSnapshot Snapshot { get; set; } = default!;
+    [Parameter, EditorRequired] public PlanningSettings Settings { get; set; } = default!;
+    [Parameter] public PlanningHorizon Selected { get; set; }
+    [Parameter] public HashSet<string> ApplicationTags { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    [Parameter] public HashSet<string> InitiativeTags { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    [Parameter] public EventCallback<PlanningHorizon> PeriodChanged { get; set; }
+    [Parameter] public EventCallback<(TagDimension Dimension, string Tag)> TagToggled { get; set; }
+    [Parameter] public EventCallback<TagDimension> TagsCleared { get; set; }
+    [Parameter] public EventCallback<(string Label, int[] Ids)> DrillDown { get; set; }
+    PlanningPeriod Period => Snapshot.Periods.Single(p => p.Horizon == Selected);
+    string Unit => Settings.EstimatesAreHours ? "h" : "units";
+    public static string Number(double number) => number.ToString("0.#", CultureInfo.InvariantCulture);
+    static string Percent(double fraction) => (Math.Clamp(fraction, 0, 1) * 100).ToString("0.###", CultureInfo.InvariantCulture) + "%";
+}
