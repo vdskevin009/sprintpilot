@@ -4,6 +4,14 @@ A local Azure DevOps sprint-management companion built with .NET 10, ASP.NET Cor
 
 **Delivery status:** implementation supplied for local evaluation. Release build and automated application/HTTP-adapter checks pass. A real Azure DevOps tenant, Windows Credential Manager, Windows launch scripts and browser interactions still require the AVD acceptance checks in `docs/AVD-ACCEPTANCE.md`. Do not treat performance targets as measured results.
 
+## Double-click installation and launch
+
+With the .NET 10 SDK installed, double-click **Install-SprintPilot.cmd** in the repository root. Setup builds the app, checks it, creates a desktop shortcut, and opens the browser. Updates safely stop only the verified instance belonging to this checkout before publishing.
+
+For daily use, double-click **Open-SprintPilot.cmd** or the desktop shortcut. It reuses a running instance. **Stop-SprintPilot.cmd** stops the verified instance. Do not launch the published EXE directly.
+
+These entry points use your normal Windows account and respect AVD PowerShell policy. Errors stay visible. The permissions fix writes only the app folder's access rules; it does not request audit privileges or change ownership.
+
 ## Start on your Windows AVD
 
 1. Clone `https://github.com/vdskevin009/sprintpilot.git` onto your AVD, or extract the source ZIP locally. Keep the checkout in a location you can write to.

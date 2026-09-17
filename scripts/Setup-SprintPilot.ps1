@@ -1,12 +1,15 @@
 [CmdletBinding()]
-param([int]$Port=5271, [switch]$NoShortcut, [switch]$NoLaunch)
+param([int]$Port=0, [switch]$NoShortcut, [switch]$NoLaunch)
 . "$PSScriptRoot\Common.ps1"
 $paths = Get-SprintPilotPaths
 $localPort = Get-SprintPilotPort $paths $Port
 if (!(Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'Install the .NET 10 SDK for your Windows architecture, then run setup again. No Azure resources are needed.' }
 $sdks = & dotnet --list-sdks
 if (!($sdks | Where-Object { $_ -match '^10\.0\.\d+' })) { throw '.NET 10 SDK is required. Install it or ask your AVD administrator to make it available.' }
-if ($null -ne (Get-SprintPilotHealth $localPort)) { throw 'Stop SprintPilot before updating its published files: scripts\Stop-SprintPilot.ps1' }
+if ($null -ne (Get-SprintPilotHealth $localPort)) {
+    Write-Host 'Stopping the verified SprintPilot instance before updating...'
+    & "$PSScriptRoot\Stop-SprintPilot.ps1" -Port $localPort
+}
 Push-Location $paths.Repo
 try {
     & dotnet restore SprintPilot.sln
@@ -25,8 +28,8 @@ if (!$NoShortcut) {
     try {
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'SprintPilot.lnk'))
-        $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-        $shortcut.Arguments = '-NoProfile -WindowStyle Hidden -File "' + (Join-Path $PSScriptRoot 'Start-SprintPilot.ps1') + '" -Port ' + $localPort
+        $shortcut.TargetPath = Join-Path $paths.Repo 'Open-SprintPilot.cmd'
+        $shortcut.Arguments = '-Port ' + $localPort
         $shortcut.WorkingDirectory = $paths.Repo
         $shortcut.Description = 'Open SprintPilot sprint workspace'
         $shortcut.Save()

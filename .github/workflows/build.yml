@@ -23,3 +23,11 @@ jobs:
             [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
             if ($errors.Count -gt 0) { throw ($errors | Out-String) }
           }
+      - name: Check launcher permissions in Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/Test-LauncherPermissions.ps1
+      - name: Check launcher permissions in PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/Test-LauncherPermissions.ps1

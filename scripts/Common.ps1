@@ -12,7 +12,14 @@ function Get-SprintPilotPaths {
         $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $acl.AddAccessRule($rule)
     }
-    Set-Acl -LiteralPath $local -AclObject $acl
+    # Persist only the modified DACL. Set-Acl can also attempt to write the
+    # audit descriptor, which requires SeSecurityPrivilege on managed AVDs.
+    $directory = [IO.DirectoryInfo]::new($local)
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+        $directory.SetAccessControl($acl)
+    } else {
+        [IO.FileSystemAclExtensions]::SetAccessControl($directory, $acl)
+    }
     return @{ Repo=$repo; Local=$local; Publish=(Join-Path $repo 'artifacts\publish') }
 }
 function Get-SprintPilotPort($paths, [int]$Requested=0) {
