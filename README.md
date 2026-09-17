@@ -4,6 +4,16 @@ A local Azure DevOps sprint-management companion built with .NET 10, ASP.NET Cor
 
 **Delivery status:** implementation supplied for local evaluation. Release build and automated application/HTTP-adapter checks pass. A real Azure DevOps tenant, Windows Credential Manager, Windows launch scripts and browser interactions still require the AVD acceptance checks in `docs/AVD-ACCEPTANCE.md`. Do not treat performance targets as measured results.
 
+## Run from Visual Studio (recommended)
+
+1. Open `SprintPilot.sln` in Visual Studio with .NET 10 support and the ASP.NET/web development workload.
+2. Set **SprintPilot.Web** as the startup project.
+3. Select the **SprintPilot** launch profile (Project, not IIS Express).
+4. Press **F5**. The app opens the browser after successfully binding to localhost:5271, using its private launch session automatically.
+5. Use **Shift+F5** to stop debugging and release the port.
+
+No install/publish script or separately launched EXE is required. Close any previously running published instance first; Visual Studio cannot take a port held by another process. The profile keeps session protection enabled and does not put the PAT in launch settings.
+
 ## Double-click installation and launch
 
 With the .NET 10 SDK installed, double-click **Install-SprintPilot.cmd** in the repository root. Setup builds the app, checks it, creates a desktop shortcut, and opens the browser. Updates safely stop only the verified instance belonging to this checkout before publishing.

@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "SprintPilot": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "hotReloadEnabled": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "SPRINTPILOT_PORT": "5271",
+        "SPRINTPILOT_OPEN_BROWSER": "1"
+      }
+    }
+  }
+}

@@ -47,5 +47,16 @@ app.UseStaticFiles();app.UseAntiforgery();app.MapRazorComponents<App>().AddInter
 app.Lifetime.ApplicationStarted.Register(()=>{
  // Written only after the listener owns the port. Never emitted to logs.
  LocalPaths.WriteAsync($"session-{port}.json",new{Key=key,ProcessId=Environment.ProcessId,StartTime=System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime(),BaseDirectory=AppContext.BaseDirectory,Port=port}).GetAwaiter().GetResult();
+ // Visual Studio owns this process; open the existing private session flow
+ // after binding succeeds, without requiring a separate PowerShell launcher.
+ if(app.Environment.IsDevelopment() &&
+    Environment.GetEnvironmentVariable("SPRINTPILOT_OPEN_BROWSER") == "1"){
+  try{
+   System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(origin+"/launch#"+key){UseShellExecute=true});
+  }catch{
+   // Do not log the launch URL: it contains the local session capability.
+   app.Logger.LogWarning("Could not open the browser. Check the default browser configuration and restart debugging.");
+  }
+ }
 });
 await app.RunAsync();
