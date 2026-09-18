@@ -154,6 +154,14 @@ Every existing-item write starts with a JSON Patch revision test. If a request t
 
 ## Limits and troubleshooting
 
+To test Azure DevOps connectivity independently of the web application, run the parameterized diagnostic from the repository root:
+
+```powershell
+.\scripts\Test-AzureDevOpsConnection.ps1 -Organization "your-organization" -Project "your-project"
+```
+
+The script securely prompts for the PAT, performs read-only project and identity requests, and prints only sanitized status information. It does not contain organization, project, user, or token values and does not save the PAT.
+
 - Azure DevOps **Services** (`dev.azure.com`) is supported; Azure DevOps Server/TFS URLs are not.
 - Search is local to loaded sprint rows, not an organization-wide work-item search. Tags are read from work items and written through the work-item API; there is no standalone organization tag-administration screen.
 - Estimate mapping tries Story Points, Effort, Size, then Remaining Work. For Tasks this can mean hours, not points; the UI labels the column Estimate.
