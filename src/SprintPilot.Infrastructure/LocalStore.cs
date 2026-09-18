@@ -11,7 +11,7 @@ public static class LocalPaths {
 }
 public sealed class PreferencesStore:IPreferencesStore {
  private readonly SemaphoreSlim gate=new(1,1);
- public async Task<Preferences> LoadAsync(CancellationToken ct=default){await gate.WaitAsync(ct);try{var path=LocalPaths.File("preferences.json");var p=System.IO.File.Exists(path)?JsonSerializer.Deserialize<Preferences>(await System.IO.File.ReadAllTextAsync(path,ct))??new():new();if(p.AiPrompt=="")p.AiPrompt=AiReview.DefaultPrompt;return p;}catch(JsonException){throw new TrackerException("Local preferences are invalid. Rename preferences.json in your local SprintPilot folder and restart.");}finally{gate.Release();}}
+ public async Task<Preferences> LoadAsync(CancellationToken ct=default){await gate.WaitAsync(ct);try{var path=LocalPaths.File("preferences.json");var p=System.IO.File.Exists(path)?JsonSerializer.Deserialize<Preferences>(await System.IO.File.ReadAllTextAsync(path,ct))??new():new();if(p.AiPrompt=="")p.AiPrompt=AiReview.DefaultPrompt;if(p.Version<2){p.Columns=["Order",..p.Columns.Where(c=>c!="Order")];p.Version=2;await LocalPaths.WriteAsync("preferences.json",p,ct);}return p;}catch(JsonException){throw new TrackerException("Local preferences are invalid. Rename preferences.json in your local SprintPilot folder and restart.");}finally{gate.Release();}}
  public async Task SaveAsync(Preferences p,CancellationToken ct=default){await gate.WaitAsync(ct);try{await LocalPaths.WriteAsync("preferences.json",p,ct);}finally{gate.Release();}}
 }
 public sealed class CredentialStore:ICredentialStore {

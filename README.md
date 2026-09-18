@@ -32,6 +32,14 @@ These entry points use your normal Windows account and respect AVD PowerShell po
 .\scripts\Setup-SprintPilot.ps1
 ```
 
+For later updates, one command safely stops the app, pulls `main`, rebuilds and tests it, then starts it again:
+
+```powershell
+.\scripts\Update-SprintPilot.ps1
+```
+
+The updater refuses to overwrite local changes or update from a branch other than `main`. Add `-NoBrowser` if you do not want it to open Edge after starting.
+
 Setup checks for the .NET 10 SDK, restores, builds, runs the two test executables, publishes a Release build, saves the port, creates a desktop shortcut where permitted, and opens SprintPilot. It does not provision Azure resources or require administrator privileges. The initial setup takes longer than ordinary launches.
 
 4. Enter the organization **name**, project, and PAT on the welcome screen. Test the connection, then save locally. Select your team in Settings if needed. Team iterations and area paths must already be configured in Azure DevOps.
