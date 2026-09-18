@@ -15,7 +15,7 @@ public partial class Home {
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="";
  string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="";
  string newType="",newTitle="",newDescription="",newAcceptance="",newArea="",newTags="",newIteration="";int? newParent;
- readonly string[] AllColumns=["ID","Type","Title","Owner","State","Iteration","Area","Estimate","Priority","Parent","Tags","Changed"];
+ readonly string[] AllColumns=["Order","ID","Type","Title","Owner","State","Iteration","Area","Estimate","Priority","Parent","Tags","Changed"];
  readonly string[] QuickViews=["My Work","Team","Unassigned","Carry-over","Bugs","Recently Changed"];
  readonly string[] Commands=["Next sprint","Previous sprint","Show my work","Show unassigned","Select all visible","Clear selection","Move selected to next sprint","Move selected to previous sprint","Assign selected","Add tag","Remove tag","Change state","New PBI","Refresh"];
  List<WorkItem> items=[],previousItems=[],related=[];readonly Dictionary<string,List<WorkItem>> sprintCache=new();
@@ -27,6 +27,7 @@ public partial class Home {
  string Adjacent(int delta)=>meta?.Iterations.ElementAtOrDefault(sprintIndex+delta)?.Name??"No sprint";
  string DateRange=>CurrentSprint?.Start is {} start?$"{start:MMM d} – {CurrentSprint.Finish:MMM d, yyyy}":"Dates not configured";
  IEnumerable<WorkItem> AllLoaded=>items.Concat(previousItems).Concat(related).DistinctBy(w=>w.Id);
+ string[] TagSuggestions=>AllLoaded.SelectMany(w=>w.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
  List<WorkItem> SelectedItems=>AllLoaded.Where(w=>selected.Contains(w.Id)).ToList();
  IEnumerable<string> CommonStates {get {var sets=SelectedItems.Select(w=>meta!.Types.First(t=>t.Name==w.Type).States.Select(s=>s.Name).ToHashSet()).ToArray();if(sets.Length==0)return [];var common=sets[0];foreach(var set in sets.Skip(1))common.IntersectWith(set);return common.Order();}}
  string[] Issues(WorkItem w)=>Quality.Issues(w,meta!,prefs,AllLoaded,meta!.Iterations.FirstOrDefault(i=>i.Path==w.Iteration));
@@ -34,10 +35,10 @@ public partial class Home {
  List<WorkItem> Visible {get{
   IEnumerable<WorkItem> rows=(quickView=="Carry-over"||cleanupFilter=="Previous-sprint unfinished")?previousItems.Where(w=>!Quality.Finished(w,meta!)):items;
   if(meta is null)return [];
-  rows=rows.Where(w=>(search==""||w.Id.ToString().Contains(search)||w.Title.Contains(search,StringComparison.OrdinalIgnoreCase)||w.Tags.Any(t=>t.Contains(search,StringComparison.OrdinalIgnoreCase)))&&(ownerFilter==""||w.OwnerId==ownerFilter)&&(stateFilter==""||w.State==stateFilter)&&(typeFilter==""||w.Type==typeFilter)&&(tagFilter==""||w.Tags.Any(t=>t.Contains(tagFilter,StringComparison.OrdinalIgnoreCase)))&&(areaFilter==""||w.Area==areaFilter)&&(priorityFilter==""||w.Priority?.ToString()==priorityFilter));
+  rows=rows.Where(w=>(search==""||w.Id.ToString().Contains(search)||w.Title.Contains(search,StringComparison.OrdinalIgnoreCase)||w.Tags.Any(t=>t.Contains(search,StringComparison.OrdinalIgnoreCase)))&&(ownerFilter==""||w.OwnerId==ownerFilter||w.Owner.Contains(ownerFilter,StringComparison.OrdinalIgnoreCase))&&(stateFilter==""||w.State.Contains(stateFilter,StringComparison.OrdinalIgnoreCase))&&(typeFilter==""||w.Type.Contains(typeFilter,StringComparison.OrdinalIgnoreCase))&&(tagFilter==""||w.Tags.Any(t=>t.Contains(tagFilter,StringComparison.OrdinalIgnoreCase)))&&(areaFilter==""||w.Area.Contains(areaFilter,StringComparison.OrdinalIgnoreCase))&&(priorityFilter==""||w.Priority?.ToString().Contains(priorityFilter)==true));
   rows=quickView switch{"My Work"=>rows.Where(w=>w.OwnerId==meta.Me.Id),"Unassigned"=>rows.Where(w=>w.OwnerId==""),"Bugs"=>rows.Where(w=>w.Type.Equals("Bug",StringComparison.OrdinalIgnoreCase)),"Recently Changed"=>rows.Where(w=>w.Changed>DateTimeOffset.UtcNow.AddDays(-3)),_=>rows};
   if(screen=="cleanup"&&cleanupFilter!=""&&cleanupFilter!="Previous-sprint unfinished")rows=rows.Where(w=>Issues(w).Contains(cleanupFilter));
-  Func<WorkItem,IComparable?> key=sort switch{"ID"=>w=>w.Id,"Type"=>w=>w.Type,"Owner"=>w=>w.Owner,"State"=>w=>w.State,"Iteration"=>w=>w.Iteration,"Area"=>w=>w.Area,"Estimate"=>w=>w.Estimate,"Priority"=>w=>w.Priority,"Parent"=>w=>w.Parent,"Tags"=>w=>string.Join(";",w.Tags),"Changed"=>w=>w.Changed,_=>w=>w.Title};return (descending?rows.OrderByDescending(key):rows.OrderBy(key)).ThenBy(w=>w.Id).ToList();
+  Func<WorkItem,IComparable?> key=sort switch{"Order"=>w=>w.Order,"ID"=>w=>w.Id,"Type"=>w=>w.Type,"Owner"=>w=>w.Owner,"State"=>w=>w.State,"Iteration"=>w=>w.Iteration,"Area"=>w=>w.Area,"Estimate"=>w=>w.Estimate,"Priority"=>w=>w.Priority,"Parent"=>w=>w.Parent,"Tags"=>w=>string.Join(";",w.Tags),"Changed"=>w=>w.Changed,_=>w=>w.Title};return (descending?rows.OrderByDescending(key):rows.OrderBy(key)).ThenBy(w=>w.Id).ToList();
  }}
  string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","create"=>"New work item",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
@@ -73,10 +74,10 @@ public partial class Home {
  void OpenDetail(WorkItem w)=>detail=w;
  async Task OpenById(int id){try{detail=await Tracker.GetAsync(id,lifetime.Token);}catch(Exception e){Error(e);}}
  void Replace(WorkItem w){var i=items.FindIndex(x=>x.Id==w.Id);if(i>=0)items[i]=w;var p=previousItems.FindIndex(x=>x.Id==w.Id);if(p>=0)previousItems[p]=w;if(detail?.Id==w.Id)detail=w;}
- static string Display(WorkItem w,ItemField f)=>f switch{ItemField.Title=>w.Title,ItemField.Owner=>w.Owner,ItemField.State=>w.State,ItemField.Iteration=>w.Iteration,ItemField.Area=>w.Area,ItemField.Estimate=>w.Estimate?.ToString(CultureInfo.InvariantCulture)??"",ItemField.Priority=>w.Priority?.ToString()??"",ItemField.Tags=>string.Join("; ",w.Tags),ItemField.Description=>ContentText.Plain(w.Description),ItemField.Acceptance=>ContentText.Plain(w.Acceptance),_=>""};
+ static string Display(WorkItem w,ItemField f)=>f switch{ItemField.Title=>w.Title,ItemField.Owner=>w.Owner,ItemField.State=>w.State,ItemField.Iteration=>w.Iteration,ItemField.Area=>w.Area,ItemField.Estimate=>w.Estimate?.ToString(CultureInfo.InvariantCulture)??"",ItemField.Order=>w.Order?.ToString(CultureInfo.InvariantCulture)??"",ItemField.Priority=>w.Priority?.ToString()??"",ItemField.Tags=>string.Join("; ",w.Tags),ItemField.Description=>ContentText.Plain(w.Description),ItemField.Acceptance=>ContentText.Plain(w.Acceptance),_=>""};
  async Task InlineEdit((WorkItem Item,ItemField Field,string Value) edit){var w=edit.Item;if(!busy.Add(w.Id))return;try{
   if(drafts.ContainsKey(w.Id))throw new TrackerException("Apply or discard the local AI draft before editing this item.");
-  object? value=edit.Value;if(edit.Field==ItemField.Estimate){if(edit.Value=="")value=null;else if(double.TryParse(edit.Value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)&&double.IsFinite(n)&&n>=0)value=n;else throw new TrackerException("Estimate must be a non-negative number.");}
+  object? value=edit.Value;if(edit.Field is ItemField.Estimate or ItemField.Order){if(edit.Value=="")value=null;else if(double.TryParse(edit.Value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)&&double.IsFinite(n)&&n>=0)value=n;else throw new TrackerException(edit.Field==ItemField.Order?"Order must be a non-negative number.":"Estimate must be a non-negative number.");}
   if(edit.Field==ItemField.Priority){if(int.TryParse(edit.Value,out var n)&&n>=1&&n<=4)value=n;else throw new TrackerException("Priority must be 1–4.");}
   var changes=new[]{new Change(edit.Field,value)};Replace(ItemChanges.Apply(w,changes,meta!));await InvokeAsync(StateHasChanged);var saved=await Tracker.UpdateAsync(new(w,changes),lifetime.Token);Replace(saved);sprintCache.Clear();
   if(saved.Iteration!=CurrentSprint?.Path)items.RemoveAll(x=>x.Id==saved.Id);if(saved.Iteration!=meta?.Iterations.ElementAtOrDefault(sprintIndex-1)?.Path)previousItems.RemoveAll(x=>x.Id==saved.Id);Notify($"#{w.Id} saved.");
