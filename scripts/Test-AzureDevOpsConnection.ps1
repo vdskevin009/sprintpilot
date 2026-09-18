@@ -67,7 +67,7 @@ try {
 
     $results = @(
         Test-Endpoint -Name 'Project access' -Uri "$baseUri/_apis/projects/$escapedProject`?api-version=7.1" -Headers $headers
-        Test-Endpoint -Name 'Authentication identity' -Uri "$baseUri/_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1&api-version=7.1" -Headers $headers
+        Test-Endpoint -Name 'Authentication identity' -Uri "$baseUri/_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1" -Headers $headers
     )
 
     $results | Format-Table -AutoSize

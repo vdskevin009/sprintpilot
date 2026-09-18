@@ -18,10 +18,10 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
  static string S(JsonNode? n)=>n?.ToString()??"";
  static JsonArray Values(JsonNode n)=>(JsonArray?)n["value"]??[];
  async Task<Credentials> Credentials(CancellationToken ct)=>await store.GetAsync(ct)??throw new TrackerException("Azure DevOps connection is required.");
- async Task<JsonNode> Send(Credentials c,string path,HttpMethod method,object? body=null,bool patch=false,CancellationToken ct=default,bool organization=false){
+ async Task<JsonNode> Send(Credentials c,string path,HttpMethod method,object? body=null,bool patch=false,CancellationToken ct=default,bool organization=false,bool apiVersion=true){
   ValidateConnection(c.Connection);activeConnection=c.Connection;var baseUrl=$"https://dev.azure.com/{E(c.Connection.Organization)}/"+(organization?"":E(c.Connection.Project)+"/");
   for(int attempt=0;;attempt++){
-   using var req=new HttpRequestMessage(method,baseUrl+path+(path.Contains('?')?"&":"?")+"api-version=7.1");await auth.AuthenticateAsync(req,c,ct);
+   using var req=new HttpRequestMessage(method,baseUrl+path+(apiVersion?(path.Contains('?')?"&":"?")+"api-version=7.1":""));await auth.AuthenticateAsync(req,c,ct);
    if(body is not null)req.Content=new StringContent(System.Text.Json.JsonSerializer.Serialize(body),Encoding.UTF8,patch?"application/json-patch+json":"application/json");
    HttpResponseMessage response;
    try{response=await http.SendAsync(req,ct);}catch(HttpRequestException){throw new TrackerException("Cannot reach Azure DevOps. Check network, VPN and proxy settings.");}
@@ -38,7 +38,7 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   // Azure DevOps' connection-data endpoint expects synchronization parameters on
   // some organizations. Supplying the documented initial values keeps this
   // authentication-only check compatible across account configurations.
-  var n=await Send(credentials,"_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",HttpMethod.Get,ct:ct,organization:true);var u=n["authenticatedUser"];return new(S(u?["id"]),S(u?["providerDisplayName"]),S(u?["properties"]?["Account"]?["$value"]));
+  var n=await Send(credentials,"_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",HttpMethod.Get,ct:ct,organization:true,apiVersion:false);var u=n["authenticatedUser"];return new(S(u?["id"]),S(u?["providerDisplayName"]),S(u?["properties"]?["Account"]?["$value"]));
  }
  public async Task<Metadata> MetadataAsync(bool refresh=false,CancellationToken ct=default){await metadataGate.WaitAsync(ct);try{
   var c=await Credentials(ct);var key=c.Connection.ToString();if(!refresh&&cached is not null&&cacheKey==key&&expires>DateTimeOffset.UtcNow)return cached;

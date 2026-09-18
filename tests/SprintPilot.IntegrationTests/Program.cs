@@ -44,7 +44,7 @@ sealed class FakeAzure:HttpMessageHandler {
  protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r,CancellationToken ct){Calls++;var p=r.RequestUri!.AbsolutePath;var body=r.Content is null?"":await r.Content.ReadAsStringAsync(ct);JsonNode n;
   if(r.Headers.Authorization?.Scheme!="Basic")throw new Exception("Authentication header missing");
   if(r.Method==HttpMethod.Patch){PatchCalls++;LastPatch=JsonNode.Parse(body)!.AsArray();if(FailPatch)return new(HttpStatusCode.Forbidden){Content=new StringContent(Canary)};n=Item(1,2);}
-  else if(p.EndsWith("/connectionData")){var q=r.RequestUri.Query;SawConnectionDataParameters=q.Contains("connectOptions=1")&&q.Contains("lastChangeId=-1")&&q.Contains("lastChangeId64=-1");if(!SawConnectionDataParameters)return new(HttpStatusCode.BadRequest);n=JsonNode.Parse("""{"authenticatedUser":{"id":"me","providerDisplayName":"Test user"}}""")!;}
+  else if(p.EndsWith("/connectionData")){var q=r.RequestUri.Query;SawConnectionDataParameters=q.Contains("connectOptions=1")&&q.Contains("lastChangeId=-1")&&q.Contains("lastChangeId64=-1")&&!q.Contains("api-version");if(!SawConnectionDataParameters)return new(HttpStatusCode.BadRequest);n=JsonNode.Parse("""{"authenticatedUser":{"id":"me","providerDisplayName":"Test user"}}""")!;}
   else if(p.EndsWith("/members"))n=JsonNode.Parse("""{"value":[{"identity":{"id":"me","displayName":"Test user","uniqueName":"test@example.test"}}]}""")!;
   else if(p.EndsWith("/teams"))n=JsonNode.Parse("""{"value":[{"id":"team","name":"Team"}]}""")!;
   else if(p.EndsWith("/iterations"))n=JsonNode.Parse("""{"value":[{"id":"sprint","name":"Sprint A","path":"Project\\Sprint 'A'","attributes":{}}]}""")!;
