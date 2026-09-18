@@ -8,6 +8,7 @@ using SprintPilot.Domain;
 var fake=new FakeAzure();using var http=new HttpClient(fake);var tracker=new AzureTracker(http,new FakeCredentials(),new PatAuthentication(),NullLogger<AzureTracker>.Instance);
 int count=0;void Check(bool x,string name){if(!x)throw new Exception("FAIL: "+name);count++;Console.WriteLine("PASS: "+name);}
 var meta=await tracker.MetadataAsync();Check(meta.Types[0].EstimateField=="Microsoft.VSTS.Scheduling.Effort","Process-specific estimate mapping");
+Check(fake.SawConnectionDataParameters,"Connection test supplies Azure DevOps synchronization parameters");
 var calls=fake.Calls;await tracker.MetadataAsync();Check(fake.Calls==calls,"Metadata cache suppresses repeated requests");
 var rows=await tracker.SprintAsync("Project\\Sprint 'A'");Check(rows.Count==201&&fake.BatchSizes.SequenceEqual(new[]{200,1}),"Read batching respects 200-item limit");
 Check(fake.LastWiql.Contains("Sprint ''A''")&&fake.LastWiql.Contains("[System.AreaPath] UNDER 'Project'"),"WIQL escapes literals and restricts team areas");
@@ -38,12 +39,12 @@ sealed class FakeCredentials:ICredentialStore {
 }
 sealed class FakeAzure:HttpMessageHandler {
  public const string Canary="synthetic-test-value-do-not-log";
- public int Calls,PatchCalls;public List<int> BatchSizes=[];public bool SawExpand,FailPatch,Paging,OmitOne;public string LastWiql="";public JsonArray? LastPatch;
+ public int Calls,PatchCalls;public List<int> BatchSizes=[];public bool SawExpand,SawConnectionDataParameters,FailPatch,Paging,OmitOne;public string LastWiql="";public JsonArray? LastPatch;
  static JsonObject Item(int id,int rev=1)=>new(){["id"]=id,["rev"]=rev,["fields"]=new JsonObject{["System.Title"]="Test item",["System.WorkItemType"]="Product Backlog Item",["System.State"]="New",["System.IterationPath"]="Project\\Sprint 'A'",["System.AreaPath"]="Project",["Microsoft.VSTS.Scheduling.Effort"]=8},["relations"]=new JsonArray(new JsonObject{["rel"]="System.LinkTypes.Hierarchy-Reverse",["url"]="https://dev.azure.com/example/_apis/wit/workItems/5000"},new JsonObject{["rel"]="System.LinkTypes.Hierarchy-Forward",["url"]="https://dev.azure.com/example/_apis/wit/workItems/6000"})};
  protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r,CancellationToken ct){Calls++;var p=r.RequestUri!.AbsolutePath;var body=r.Content is null?"":await r.Content.ReadAsStringAsync(ct);JsonNode n;
   if(r.Headers.Authorization?.Scheme!="Basic")throw new Exception("Authentication header missing");
   if(r.Method==HttpMethod.Patch){PatchCalls++;LastPatch=JsonNode.Parse(body)!.AsArray();if(FailPatch)return new(HttpStatusCode.Forbidden){Content=new StringContent(Canary)};n=Item(1,2);}
-  else if(p.EndsWith("/connectionData"))n=JsonNode.Parse("""{"authenticatedUser":{"id":"me","providerDisplayName":"Test user"}}""")!;
+  else if(p.EndsWith("/connectionData")){var q=r.RequestUri.Query;SawConnectionDataParameters=q.Contains("connectOptions=1")&&q.Contains("lastChangeId=-1")&&q.Contains("lastChangeId64=-1");if(!SawConnectionDataParameters)return new(HttpStatusCode.BadRequest);n=JsonNode.Parse("""{"authenticatedUser":{"id":"me","providerDisplayName":"Test user"}}""")!;}
   else if(p.EndsWith("/members"))n=JsonNode.Parse("""{"value":[{"identity":{"id":"me","displayName":"Test user","uniqueName":"test@example.test"}}]}""")!;
   else if(p.EndsWith("/teams"))n=JsonNode.Parse("""{"value":[{"id":"team","name":"Team"}]}""")!;
   else if(p.EndsWith("/iterations"))n=JsonNode.Parse("""{"value":[{"id":"sprint","name":"Sprint A","path":"Project\\Sprint 'A'","attributes":{}}]}""")!;
