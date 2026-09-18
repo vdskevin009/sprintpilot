@@ -28,14 +28,17 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
    using(response){
     // Retry reads only. Never replay a mutation after an ambiguous network outcome.
     if(method!=HttpMethod.Patch && !path.Contains("workitems/$") && (response.StatusCode==(HttpStatusCode)429 || response.StatusCode==HttpStatusCode.ServiceUnavailable) && attempt<2){var wait=response.Headers.RetryAfter?.Delta??TimeSpan.FromSeconds(attempt+1);await Task.Delay(wait>TimeSpan.FromSeconds(10)?TimeSpan.FromSeconds(10):wait,ct);continue;}
-    if(!response.IsSuccessStatusCode){logger.LogWarning("Azure DevOps operation failed with status {Status}",(int)response.StatusCode);throw new TrackerException(response.StatusCode switch {HttpStatusCode.Unauthorized=>"Authentication failed. Check or renew your PAT.",HttpStatusCode.Forbidden=>"Permission denied. Check project access and token scopes.",HttpStatusCode.NotFound=>"Item or project not found, or access is denied.",HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed=>"Revision conflict. Refresh and review the newer item before retrying.",HttpStatusCode.BadRequest=>"Azure DevOps rejected the fields, transition, or revision. Refresh and verify the proposed change.",(HttpStatusCode)429=>"Azure DevOps is throttling requests. Wait before retrying.",_=>"Azure DevOps request failed. Refresh to confirm server state before retrying."});}
+    if(!response.IsSuccessStatusCode){logger.LogWarning("Azure DevOps operation failed with status {Status}",(int)response.StatusCode);throw new TrackerException(response.StatusCode switch {HttpStatusCode.Unauthorized=>"Authentication failed. Check or renew your PAT.",HttpStatusCode.Forbidden=>"Permission denied. Check project access and token scopes.",HttpStatusCode.NotFound=>"Item or project not found, or access is denied.",HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed=>"Revision conflict. Refresh and review the newer item before retrying.",HttpStatusCode.BadRequest when method==HttpMethod.Get=>"Azure DevOps rejected the connection request. Verify the organization and project names, then try again.",HttpStatusCode.BadRequest=>"Azure DevOps rejected the fields, query, transition, or revision. Refresh and verify the proposed change.",(HttpStatusCode)429=>"Azure DevOps is throttling requests. Wait before retrying.",_=>"Azure DevOps request failed. Refresh to confirm server state before retrying."});}
     try{return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))??throw new TrackerException("Empty Azure DevOps response.");}catch(System.Text.Json.JsonException){throw new TrackerException("Unexpected Azure DevOps response.");}
    }
   }
  }
  public async Task<Person> TestAsync(Credentials credentials,CancellationToken ct=default){
   await Send(credentials,"_apis/projects/"+E(credentials.Connection.Project),HttpMethod.Get,ct:ct,organization:true);
-  var n=await Send(credentials,"_apis/connectionData",HttpMethod.Get,ct:ct,organization:true);var u=n["authenticatedUser"];return new(S(u?["id"]),S(u?["providerDisplayName"]),S(u?["properties"]?["Account"]?["$value"]));
+  // Azure DevOps' connection-data endpoint expects synchronization parameters on
+  // some organizations. Supplying the documented initial values keeps this
+  // authentication-only check compatible across account configurations.
+  var n=await Send(credentials,"_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",HttpMethod.Get,ct:ct,organization:true);var u=n["authenticatedUser"];return new(S(u?["id"]),S(u?["providerDisplayName"]),S(u?["properties"]?["Account"]?["$value"]));
  }
  public async Task<Metadata> MetadataAsync(bool refresh=false,CancellationToken ct=default){await metadataGate.WaitAsync(ct);try{
   var c=await Credentials(ct);var key=c.Connection.ToString();if(!refresh&&cached is not null&&cacheKey==key&&expires>DateTimeOffset.UtcNow)return cached;
