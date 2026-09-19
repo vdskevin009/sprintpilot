@@ -76,3 +76,11 @@ html,body{height:auto;overflow:auto}
 .person-column.person-off{background:var(--hover)}
 .person-column.person-off>header{border-bottom-color:var(--accent)}
 .person-column.person-off .days-off{color:var(--accent);font-weight:600}
+
+
+/* Daily Board capacity and blocked state. */
+.capacity-usage{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.people-card.blocked{background:var(--hover);border-left:3px solid #c28a3b;padding-left:9px}
+.people-card.blocked .title-button{color:var(--muted)}
+.blocked-mark{display:inline-flex;margin-left:6px;padding:2px 6px;border:1px solid #c28a3b;border-radius:999px;color:#9a681f;font-size:10px;font-weight:600;line-height:1.2}
+.tag-chip.blocked-tag{background:#c28a3b22;border-color:#c28a3b66;color:#9a681f;font-weight:600}
