@@ -10,6 +10,7 @@ int count=0;void Check(bool x,string name){if(!x)throw new Exception("FAIL: "+na
 var meta=await tracker.MetadataAsync();Check(meta.Types[0].EstimateField=="Microsoft.VSTS.Scheduling.Effort","Process-specific estimate mapping");
 Check(fake.SawConnectionDataParameters,"Connection test supplies Azure DevOps synchronization parameters");
 var calls=fake.Calls;await tracker.MetadataAsync();Check(fake.Calls==calls,"Metadata cache suppresses repeated requests");
+var capacity=await tracker.CapacityAsync("sprint");Check(capacity.Members.Single().CapacityPerDay==6,"Azure DevOps capacity-per-day is retained");Check(capacity.Members.Single().DaysOff.Length==1,"Azure DevOps member days off are retained");
 var rows=await tracker.SprintAsync("Project\\Sprint 'A'");Check(rows.Count==201&&fake.BatchSizes.SequenceEqual(new[]{200,1}),"Read batching respects 200-item limit");
 Check(fake.LastWiql.Contains("Sprint ''A''")&&fake.LastWiql.Contains("[System.AreaPath] UNDER 'Project'"),"WIQL escapes literals and restricts team areas");
 Check(rows[0].Parent==5000&&rows[0].Children.SequenceEqual(new[]{6000}),"Batch relations are retained");
@@ -51,6 +52,8 @@ sealed class FakeAzure:HttpMessageHandler {
   else if(p.EndsWith("/teams"))n=JsonNode.Parse("""{"value":[{"id":"team","name":"Team"}]}""")!;
   else if(p.EndsWith("/iterations"))n=JsonNode.Parse("""{"value":[{"id":"sprint","name":"Sprint A","path":"Project\\Sprint 'A'","attributes":{}}]}""")!;
   else if(p.EndsWith("/teamfieldvalues"))n=JsonNode.Parse("""{"values":[{"value":"Project","includeChildren":true}]}""")!;
+  else if(p.EndsWith("/capacities"))n=JsonNode.Parse("""{"value":[{"teamMember":{"id":"me","displayName":"Test user"},"activities":[{"name":"Development","capacityPerDay":6}],"daysOff":[{"start":"2026-12-24T00:00:00Z","end":"2026-12-31T00:00:00Z"}]}]}""")!;
+  else if(p.EndsWith("/teamdaysoff"))n=JsonNode.Parse("""{"daysOff":[]}""")!;
   else if(p.EndsWith("/areas"))n=JsonNode.Parse("""{"name":"Project","children":[]}""")!;
   else if(p.EndsWith("/processconfiguration"))n=JsonNode.Parse("""{"typeFields":{"Order":{"referenceName":"Microsoft.VSTS.Common.BacklogPriority"}}}""")!;
   else if(p.EndsWith("/workitemtypes"))n=JsonNode.Parse("""{"value":[{"name":"Product Backlog Item"}]}""")!;
