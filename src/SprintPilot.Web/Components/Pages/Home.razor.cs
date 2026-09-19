@@ -83,7 +83,7 @@ public partial class Home {
  CapacityTarget DailyTarget(string personId){var iteration=CurrentSprint;if(iteration is null)return prefs.PlanningProfiles.GetValueOrDefault(PlanningProfileKey)?.DefaultTarget??new();var settings=prefs.PlanningProfiles.GetValueOrDefault(PlanningProfileKey);return settings?.CapacityOverrides.GetValueOrDefault(PlanningSettings.CapacityKey(personId,iteration.Id),settings.DefaultTarget)??new();}
  double DailyEffort(PersonLane lane)=>lane.Items.Sum(w=>w.Estimate??0);
  int CapacityUsage(PersonLane lane){var max=DailyTarget(lane.Id).Maximum;return max<=0?0:(int)Math.Round(100d*DailyEffort(lane)/max);}
- bool Blocked(WorkItem w)=>w.Tags.Any(t=>t.Equals("Blocked by External Dependency",StringComparison.OrdinalIgnoreCase)||t.Equals("Waiting Feedback Business",StringComparison.OrdinalIgnoreCase));
+ bool Blocked(WorkItem w)=>w.Tags.Any(t=>prefs.BlockedTags.Contains(t,StringComparer.OrdinalIgnoreCase));
  string OwnerValue(WorkItem w)=>meta?.People.FirstOrDefault(p=>p.Id==w.OwnerId)?.UniqueName??w.Owner;
  string PersonName(string id)=>meta?.People.FirstOrDefault(p=>p.Id==id)?.Name??"Unassigned";
  string[] SuggestedTags(WorkItem item){var words=item.Title.Split(' ',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Where(w=>w.Length>=4).ToHashSet(StringComparer.OrdinalIgnoreCase);return tagHistory.Where(w=>w.Id!=item.Id&&w.Tags.Length>0&&w.Title.Split(' ',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Count(words.Contains)>0).SelectMany(w=>w.Tags).Where(t=>!item.Tags.Contains(t,StringComparer.OrdinalIgnoreCase)).GroupBy(t=>t,StringComparer.OrdinalIgnoreCase).OrderByDescending(g=>g.Count()).ThenBy(g=>g.Key).Take(3).Select(g=>g.Key).ToArray();}
