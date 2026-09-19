@@ -421,3 +421,11 @@ html,body{height:auto;overflow:auto}
   .smart-order-row{grid-template-columns:28px minmax(0,1fr)}
   .smart-order-row small{grid-column:2;text-align:left}
 }
+
+
+/* Keep current/next sprint planning directly comparable. */
+.capacity-comparison{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.meeting-batch-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 0 12px;border-bottom:1px solid var(--border);margin-bottom:10px}
+.meeting-batch-actions>span{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:3px}
+.meeting-batch-actions button{font-size:10px;padding:5px 8px}
+@media(max-width:900px){.capacity-comparison{grid-template-columns:1fr}}
