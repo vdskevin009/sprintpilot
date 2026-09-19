@@ -174,7 +174,7 @@ public partial class Home {
  void DailyDragStart(WorkItem w){if(CanOrder(w))draggedId=w.Id;}
  async Task DailyDropOn(WorkItem target){if(draggedId is not {} id||id==target.Id)return;var source=items.FirstOrDefault(w=>w.Id==id);if(source is null){draggedId=null;return;}if(source.OwnerId!=target.OwnerId){draggedId=null;Notify("Reorder within the same person. Reassign the item first to move it to another person.");return;}if(meta is not null&&Quality.Finished(source,meta)!=Quality.Finished(target,meta)){draggedId=null;Notify("Done and active work stay in separate groups. Reorder within the same group.");return;}await DropOn(target);LogDaily($"Reordered · #{source.Id} {DisplayTitle(source)}");}
  void SetScreen(string target){screen=target;detail=null;dailyPanelItem=null;if(target=="daily"){workspaceMode="People";quickView="Team";attentionFilter="";orderReview=false;}else if(target is "workspace" or "cleanup")workspaceMode="List";if(target!="workspace")orderReview=false;}
- void ToggleOrderReview(){orderReview=!orderReview;if(orderReview){screen="workspace";workspaceMode="List";quickView="Team";attentionFilter="";sort="Order";descending=false;selected.Clear();}}
+ void ToggleOrderReview(){orderReview=!orderReview;if(orderReview){ClearFilters();screen="workspace";workspaceMode="List";sort="Order";descending=false;selected.Clear();}}
  void ToggleDailyActiveOnly()=>dailyActiveOnly=!dailyActiveOnly;
  async Task OpenCleanup(){screen="cleanup";workspaceMode="List";ClearFilters();await LoadSprint();}
  void Sort(string column){if(orderReview&&column!="Order")orderReview=false;if(sort==column)descending=!descending;else{sort=column;descending=false;}}
