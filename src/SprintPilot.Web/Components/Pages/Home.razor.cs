@@ -14,6 +14,7 @@ public partial class Home {
  bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
+ string smartFixPrompt="",smartFixCopilotText="";
  int sprintIndex,selectionAnchor=-1,templateIndex;
  string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
@@ -24,7 +25,7 @@ public partial class Home {
  readonly string[] QuickViews=["My Work","Team","Unassigned","Carry-over","Bugs","Recently Changed"];
  readonly string[] Commands=["Next sprint","Previous sprint","Show my work","Show unassigned","Select all visible","Clear selection","Move selected to next sprint","Move selected to previous sprint","Assign selected","Add tag","Remove tag","Change state","New PBI","Refresh"];
  List<WorkItem> items=[],previousItems=[],related=[],tagHistory=[],planningItems=[],dailyLookupResults=[];SprintCapacity sprintCapacity=new([],[]);readonly Dictionary<string,List<WorkItem>> sprintCache=new();readonly Dictionary<string,SprintCapacity> capacityByIteration=new(StringComparer.OrdinalIgnoreCase);
- WorkItem? dailyPanelItem;List<WorkItemComment> dailyComments=[];List<CalendarHoliday> calendarHolidays=[];List<SmartOrderRow> smartOrderPlan=[];MeetingImport meetingImport=new();List<MeetingActionDraft> meetingActions=[];
+ WorkItem? dailyPanelItem;List<WorkItemComment> dailyComments=[];List<CalendarHoliday> calendarHolidays=[];List<SmartOrderRow> smartOrderPlan=[];MeetingImport meetingImport=new();List<MeetingActionDraft> meetingActions=[];List<SmartFixGap> smartFixGaps=[];List<SmartFixSuggestion> smartFixSuggestions=[];
  readonly HashSet<string> ownerFilters=new(StringComparer.OrdinalIgnoreCase);int? draggedId,pendingOrderHighlightId;
  readonly HashSet<string> cleanupTagFilters=new(StringComparer.OrdinalIgnoreCase);
  readonly HashSet<int> selected=[],busy=[];readonly Dictionary<int,ItemUpdate> drafts=new();
@@ -50,11 +51,11 @@ public partial class Home {
   if(meta is null)return [];
   rows=rows.Where(w=>(search==""||w.Id.ToString().Contains(search)||w.Title.Contains(search,StringComparison.OrdinalIgnoreCase)||w.Tags.Any(t=>t.Contains(search,StringComparison.OrdinalIgnoreCase)))&&(ownerFilters.Count==0||ownerFilters.Contains(w.OwnerId))&&(stateFilter==""||w.State.Contains(stateFilter,StringComparison.OrdinalIgnoreCase))&&(typeFilter==""||w.Type.Contains(typeFilter,StringComparison.OrdinalIgnoreCase))&&(tagFilter==""||w.Tags.Any(t=>t.Contains(tagFilter,StringComparison.OrdinalIgnoreCase)))&&(cleanupTagFilters.Count==0||w.Tags.Any(t=>cleanupTagFilters.Contains(t)))&&(areaFilter==""||w.Area.Contains(areaFilter,StringComparison.OrdinalIgnoreCase))&&(priorityFilter==""||w.Priority?.ToString().Contains(priorityFilter)==true));
   rows=quickView switch{"My Work"=>rows.Where(w=>w.OwnerId==meta.Me.Id),"Unassigned"=>rows.Where(w=>w.OwnerId==""),"Bugs"=>rows.Where(w=>w.Type.Equals("Bug",StringComparison.OrdinalIgnoreCase)),"Recently Changed"=>rows.Where(w=>w.Changed>DateTimeOffset.UtcNow.AddDays(-3)),_=>rows};
-  rows=attentionFilter switch{"blocked"=>rows.Where(Blocked),"unassigned"=>rows.Where(w=>w.OwnerId==""),"missing-app"=>rows.Where(w=>!HasApplicationTag(w)),"missing-initiative"=>rows.Where(w=>!HasInitiativeTag(w)),"stale"=>rows.Where(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),_=>rows};
+  rows=attentionFilter switch{"blocked"=>rows.Where(Blocked),"unassigned"=>rows.Where(w=>w.OwnerId==""),"missing-app"=>rows.Where(w=>!HasApplicationTag(w)),"stale"=>rows.Where(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),_=>rows};
   if(screen=="cleanup"&&cleanupFilter!=""&&cleanupFilter!="Previous-sprint unfinished")rows=rows.Where(w=>Issues(w).Contains(cleanupFilter));
   Func<WorkItem,IComparable?> key=sort switch{"Order"=>w=>w.Order,"ID"=>w=>w.Id,"Type"=>w=>w.Type,"Owner"=>w=>w.Owner,"State"=>w=>w.State,"Iteration"=>w=>w.Iteration,"Area"=>w=>w.Area,"Estimate"=>w=>w.Estimate,"Priority"=>w=>w.Priority,"Parent"=>w=>w.Parent,"Tags"=>w=>string.Join(";",w.Tags),"Changed"=>w=>w.Changed,_=>w=>w.Title};return (descending?rows.OrderByDescending(key):rows.OrderBy(key)).ThenBy(w=>w.Id).ToList();
  }}
- string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item","smartorder"=>"Smart order preview",_=>"SprintPilot"};
+ string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item","smartorder"=>"Smart order preview","smartfix"=>"Smart Fix",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
  protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
  protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await ApplyTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}if(pendingOrderHighlightId is {} movedId){pendingOrderHighlightId=null;await JS.InvokeVoidAsync("sprintPilot.orderDropSuccess",movedId);}}
@@ -227,9 +228,14 @@ public partial class Home {
  sealed class MeetingImport {public string[] Summary {get;set;}=[];public string[] Decisions {get;set;}=[];public List<MeetingActionInput> Actions {get;set;}=[];}
  sealed class MeetingActionInput {public string Title {get;set;}="";public string Description {get;set;}="";public string AcceptanceCriteria {get;set;}="";public string Owner {get;set;}="unassigned";public string Sprint {get;set;}="current";public double? SuggestedEstimate {get;set;}public string[] Tags {get;set;}=[];}
  sealed class MeetingActionDraft {public bool Selected {get;set;}=true;public string Title {get;set;}="";public string Description {get;set;}="";public string AcceptanceCriteria {get;set;}="";public string Owner {get;set;}="";public string Sprint {get;set;}="current";public double? SuggestedEstimate {get;set;}public string TagsText {get;set;}="";public int? CreatedId {get;set;}public string CreatedUrl {get;set;}="";}
- IReadOnlyList<AttentionRow> HomeAttention(){var rows=CurrentOpenItems.ToArray();var list=new List<AttentionRow>();void Add(string key,string label,int count,string hint){if(count>0)list.Add(new(key,label,count,hint));}Add("blocked","Blocked work",rows.Count(Blocked),"Needs an unblock or dependency decision");Add("unassigned","Unassigned",rows.Count(w=>w.OwnerId==""),"Give the work a clear owner");if(ApplicationTags().Length>0)Add("missing-app","Missing application tag",rows.Count(w=>!HasApplicationTag(w)),"Classify work so application load stays useful");if(InitiativeTags().Length>0)Add("missing-initiative","Missing initiative tag",rows.Count(w=>!HasInitiativeTag(w)),"Keep initiative scope visible");Add("stale","Stagnating work",rows.Count(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),$"No change for more than {prefs.StaleDays} days");return list;}
+ sealed record SmartFixGap(WorkItem Item,bool MissingApplication,bool MissingEstimate,bool MissingTags);
+ sealed class SmartFixImport {public List<SmartFixSuggestionInput> Items {get;set;}=[];}
+ sealed class SmartFixSuggestionInput {public int Id {get;set;}public string? ApplicationTag {get;set;}public double? Estimate {get;set;}public string[] AddTags {get;set;}=[];public string? Reason {get;set;}}
+ sealed class SmartFixSuggestion {public int Id {get;set;}public string ApplicationTag {get;set;}="";public double? Estimate {get;set;}public string[] AddTags {get;set;}=[];public string Reason {get;set;}="";public bool ApplyApplication {get;set;}public bool ApplyEstimate {get;set;}public bool ApplyTags {get;set;}}
+ IReadOnlyList<AttentionRow> HomeAttention(){var rows=CurrentOpenItems.ToArray();var list=new List<AttentionRow>();void Add(string key,string label,int count,string hint){if(count>0)list.Add(new(key,label,count,hint));}Add("blocked","Blocked work",rows.Count(Blocked),"Needs an unblock or dependency decision");Add("unassigned","Unassigned",rows.Count(w=>w.OwnerId==""),"Give the work a clear owner");if(ApplicationTags().Length>0)Add("missing-app","Missing application tag",rows.Count(w=>!HasApplicationTag(w)),"Classify work so application load stays useful");Add("stale","Stagnating work",rows.Count(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),$"No change for more than {prefs.StaleDays} days");return list;}
  List<HomeGroup> Remaining(TagDimension dimension){var configured=PlanningPrefs.Tags.Where(t=>dimension==TagDimension.Application?t.Application:t.Initiative).Select(t=>t.Tag).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();return configured.Select(tag=>{var rows=OpenPlanningItems.Where(w=>w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)).ToArray();return new HomeGroup(tag,rows.Length,rows.Sum(w=>Planning.Estimate(w,PlanningPrefs)??0));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Count).ThenBy(x=>x.Name).ToList();}
- List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":missing>0?"Estimates missing":effort>capacity?"Over capacity":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
+ List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":effort>capacity?"Over capacity":missing>0?"Estimates missing":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
+ string CapacityLoadText(CapacityRow row){if(!PlanningPrefs.EstimatesAreHours)return "Hour comparison off";if(row.CapacityHours<=0)return row.Effort>0?$"{row.Percent}% · no capacity":"0%";var delta=row.Effort-row.CapacityHours;var unknown=row.MissingEstimates>0?" + unknown":"";return delta>0?$"{row.Percent}% · +{delta:0.#}h{unknown}":$"{row.Percent}% · {Math.Max(0,-delta):0.#}h left{unknown}";}
  InitiativeMetadata Initiative(string tag){var key=prefs.InitiativeMetadata.Keys.FirstOrDefault(k=>k.Equals(tag,StringComparison.OrdinalIgnoreCase));if(key is not null)return prefs.InitiativeMetadata[key];var value=new InitiativeMetadata();prefs.InitiativeMetadata[tag]=value;return value;}
  List<InitiativeRow> InitiativeRows(){var today=DateOnly.FromDateTime(DateTime.Now);return Remaining(TagDimension.Initiative).Select(g=>{var m=Initiative(g.Name);var attention=m.Status is "At Risk" or "Blocked"||m.Confidence=="Low"||(m.DueDate is {} due&&due<=today.AddDays(14));return new InitiativeRow(g.Name,g.Count,g.Effort,m,attention);}).OrderByDescending(x=>x.NeedsAttention).ThenBy(x=>x.Meta.DueDate??DateOnly.MaxValue).ThenBy(x=>x.Tag).ToList();}
  IEnumerable<(string Id,string Name,int Count)> FilterPeople=>items.GroupBy(w=>w.OwnerId).Select(g=>(Id:g.Key,Name:PersonName(g.Key),Count:g.Count())).Where(x=>filterOptionSearch==""||x.Name.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Name=="Unassigned").ThenBy(x=>x.Name);
@@ -373,6 +379,101 @@ __MEETING_NOTES__
  }catch(Exception e){Replace(w);Error(e);}finally{busy.Remove(w.Id);}}
  Task Show(string value){dialog=value;dialogError="";commandSearch="";focusDialog=true;return Task.CompletedTask;}
  void CloseDialog(){if(applying)return;dialog="";dialogError="";_=JS.InvokeVoidAsync("sprintPilot.restoreFocus");}
+
+ async Task PrepareSmartFix(){
+  try{
+   if(selected.Count==0)throw new TrackerException("Select work items first.");
+   if(SelectedItems.Count!=selected.Count)throw new TrackerException("Some selected items are no longer loaded. Clear selection and select again.");
+   if(SelectedItems.Any(w=>busy.Contains(w.Id)||drafts.ContainsKey(w.Id)))throw new TrackerException("Wait for saves and apply or discard local drafts before using Smart Fix.");
+   var apps=ApplicationTags();
+   var canSuggestTags=KnownPlanningTags.Length>0;
+   smartFixGaps=SelectedItems.Select(w=>new SmartFixGap(w,apps.Length>0&&!HasApplicationTag(w),w.Estimate is null or <=0,canSuggestTags&&w.Tags.Length==0)).Where(g=>g.MissingApplication||g.MissingEstimate||g.MissingTags).ToList();
+   if(smartFixGaps.Count==0)throw new TrackerException("The selected items have no missing application tag, estimate, or tags that Smart Fix can address.");
+   smartFixSuggestions=[];smartFixCopilotText="";smartFixPrompt=BuildSmartFixPrompt();await Show("smartfix");
+  }catch(Exception e){Error(e);}
+ }
+ string SmartFixNeeds(SmartFixGap gap)=>string.Join(", ",new[]{gap.MissingApplication?"application tag":"",gap.MissingEstimate?"estimate":"",gap.MissingTags?"tags":""}.Where(x=>x!=""));
+ static string ClipSmartFixText(string value,int max=700){var text=ContentText.Plain(value??"").Trim();return text.Length<=max?text:text[..max]+"…";}
+ string BuildSmartFixPrompt(){
+  var applications=string.Join(", ",ApplicationTags());
+  var initiatives=string.Join(", ",InitiativeTags());
+  var known=string.Join(", ",KnownPlanningTags.Take(80));
+  var details=string.Join("\n\n",smartFixGaps.Select(g=>$"# {g.Item.Id}\nTitle: {g.Item.Title}\nType: {g.Item.Type}\nNeeds: {SmartFixNeeds(g)}\nCurrent estimate: {(g.Item.Estimate?.ToString("0.##",CultureInfo.InvariantCulture)??"(missing)")}\nExisting tags: {(g.Item.Tags.Length==0?"(none)":string.Join("; ",g.Item.Tags))}\nDescription: {ClipSmartFixText(g.Item.Description)}\nAcceptance criteria: {ClipSmartFixText(g.Item.Acceptance,450)}"));
+  return """
+You are helping clean up selected Azure DevOps work items for SprintPilot.
+Use only the work-item information and the known tags below. Do not invent business scope, tags, or estimates.
+The initiative tag is OPTIONAL. Never add an initiative merely because an item does not have one.
+Only propose values for fields listed in "Needs". Do not replace or remove existing tags.
+For applicationTag, use one of the configured application tags or null if you cannot determine it.
+For addTags, use only tags from Known Azure DevOps tags. Return only tags that should be ADDED.
+For estimate, use a positive number only when an estimate is missing and the work-item content gives enough evidence; otherwise return null.
+Return raw JSON only, without Markdown fences.
+
+Configured application tags: __APPLICATION_TAGS__
+Configured initiative tags (optional): __INITIATIVE_TAGS__
+Known Azure DevOps tags: __KNOWN_TAGS__
+
+Required JSON shape:
+{
+  "items": [
+    {
+      "id": 123,
+      "applicationTag": "Existing application tag or null",
+      "estimate": 5,
+      "addTags": ["Existing known tag"],
+      "reason": "Short explanation grounded in the work item"
+    }
+  ]
+}
+
+WORK ITEMS
+__WORK_ITEMS__
+""".Replace("__APPLICATION_TAGS__",applications==""?"(none configured)":applications).Replace("__INITIATIVE_TAGS__",initiatives==""?"(none configured)":initiatives).Replace("__KNOWN_TAGS__",known==""?"(none known)":known).Replace("__WORK_ITEMS__",details);
+ }
+ async Task CopySmartFixPrompt(){try{if(string.IsNullOrWhiteSpace(smartFixPrompt))throw new TrackerException("Prepare Smart Fix first.");await JS.InvokeVoidAsync("sprintPilot.copy",smartFixPrompt);Notify($"Copied Smart Fix prompt for {smartFixGaps.Count} item(s).");}catch(Exception e){Error(e);}}
+ void ParseSmartFixCopilot(){
+  try{
+   var parsed=JsonSerializer.Deserialize<SmartFixImport>(StripCodeFence(smartFixCopilotText),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})??throw new JsonException();
+   var duplicates=parsed.Items.GroupBy(x=>x.Id).Where(g=>g.Count()>1).Select(g=>g.Key).ToArray();if(duplicates.Length>0)throw new TrackerException("Copilot returned duplicate work-item IDs: "+string.Join(", ",duplicates));
+   var gaps=smartFixGaps.ToDictionary(g=>g.Item.Id);
+   var allowedTags=KnownPlanningTags.Concat(ApplicationTags()).Distinct(StringComparer.OrdinalIgnoreCase).ToHashSet(StringComparer.OrdinalIgnoreCase);
+   var applicationTags=ApplicationTags().ToHashSet(StringComparer.OrdinalIgnoreCase);
+   var suggestions=new List<SmartFixSuggestion>();
+   foreach(var input in parsed.Items){
+    if(!gaps.TryGetValue(input.Id,out var gap))throw new TrackerException($"Copilot returned #{input.Id}, which was not part of this Smart Fix batch.");
+    var application=(input.ApplicationTag??"").Trim();
+    if(!gap.MissingApplication)application="";
+    else if(application!=""&&!applicationTags.Contains(application))throw new TrackerException($"#{input.Id}: application tag '{application}' is not one of the configured application tags.");
+    var estimate=input.Estimate;
+    if(estimate is {} estimateValue&&(!double.IsFinite(estimateValue)||estimateValue<=0))throw new TrackerException($"#{input.Id}: estimate must be a positive number or null.");
+    if(!gap.MissingEstimate)estimate=null;
+    var addTags=(input.AddTags??[]).Where(t=>!string.IsNullOrWhiteSpace(t)).Select(t=>t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    foreach(var tag in addTags)if(!allowedTags.Contains(tag))throw new TrackerException($"#{input.Id}: tag '{tag}' is not a known Azure DevOps tag.");
+    addTags=addTags.Where(t=>!gap.Item.Tags.Contains(t,StringComparer.OrdinalIgnoreCase)&&!t.Equals(application,StringComparison.OrdinalIgnoreCase)).ToArray();
+    var suggestion=new SmartFixSuggestion{Id=input.Id,ApplicationTag=application,Estimate=estimate,AddTags=addTags,Reason=(input.Reason??"").Trim(),ApplyApplication=application!="",ApplyEstimate=estimate is not null,ApplyTags=addTags.Length>0};
+    if(suggestion.ApplyApplication||suggestion.ApplyEstimate||suggestion.ApplyTags)suggestions.Add(suggestion);
+   }
+   smartFixSuggestions=suggestions;if(smartFixSuggestions.Count==0)throw new TrackerException("Copilot did not return any applicable Smart Fix suggestions.");
+   dialogError="";
+  }catch(Exception e){smartFixSuggestions=[];Error(e);}
+ }
+ void ReviewSmartFix(){
+  try{
+   var loaded=SelectedItems.ToDictionary(w=>w.Id);
+   pending=[];
+   foreach(var suggestion in smartFixSuggestions){
+    if(!loaded.TryGetValue(suggestion.Id,out var original))throw new TrackerException($"#{suggestion.Id} is no longer loaded. Close Smart Fix and select the items again.");
+    var changes=new List<Change>();var tags=original.Tags.ToList();var tagChanged=false;
+    if(suggestion.ApplyApplication&&suggestion.ApplicationTag!=""&&!tags.Contains(suggestion.ApplicationTag,StringComparer.OrdinalIgnoreCase)){tags.Add(suggestion.ApplicationTag);tagChanged=true;}
+    if(suggestion.ApplyTags)foreach(var tag in suggestion.AddTags)if(!tags.Contains(tag,StringComparer.OrdinalIgnoreCase)){tags.Add(tag);tagChanged=true;}
+    if(tagChanged)changes.Add(new(ItemField.Tags,string.Join("; ",tags.Distinct(StringComparer.OrdinalIgnoreCase))));
+    if(suggestion.ApplyEstimate&&suggestion.Estimate is {} estimate&&original.Estimate is null or <=0)changes.Add(new(ItemField.Estimate,estimate));
+    if(changes.Count>0)pending.Add(new(original,changes));
+   }
+   if(pending.Count==0)throw new TrackerException("Choose at least one Smart Fix suggestion before continuing.");
+   results=[];dialog="review";dialogError="";
+  }catch(Exception e){Error(e);}
+ }
  void StartBulk(string kind){if(selected.Count==0){Notify("Select work items first.");return;}bulkKind=kind;bulkValue=kind switch{"Next"=>meta?.Iterations.ElementAtOrDefault(sprintIndex+1)?.Path??"","Previous"=>meta?.Iterations.ElementAtOrDefault(sprintIndex-1)?.Path??"",_=>""};_=Show("bulk");}
  void PreviewBulk(){try{if(bulkKind=="State"&&!CommonStates.Contains(bulkValue))throw new TrackerException("Choose a state supported by all selected work-item types.");if(SelectedItems.Count!=selected.Count)throw new TrackerException("Some selected items are no longer loaded. Clear selection and select again.");if(SelectedItems.Any(w=>busy.Contains(w.Id)||drafts.ContainsKey(w.Id)))throw new TrackerException("Wait for saves and apply or discard local drafts before bulk editing.");
   if(bulkValue==""&&bulkKind!="Owner")throw new TrackerException("Choose a value first.");if(bulkKind=="Priority"&&(!int.TryParse(bulkValue,out var p)||p<1||p>4))throw new TrackerException("Priority must be 1–4.");
