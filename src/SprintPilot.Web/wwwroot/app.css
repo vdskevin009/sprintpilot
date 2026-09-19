@@ -22,3 +22,25 @@
 .grid-wrap{height:calc(100dvh - 370px);min-height:260px;max-height:720px;overscroll-behavior:contain;scrollbar-gutter:stable}
 td .order-number{width:76px;font-variant-numeric:tabular-nums}
 td .tag-input{width:170px}
+
+/* Keep the application chrome fixed while large sprint lists scroll in place. */
+html,body{height:100%;overflow:hidden}
+.app-shell{height:100dvh;min-height:0;overflow:hidden}
+.app-shell>main{height:100dvh;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.app-shell>main>.topbar{flex:0 0 54px}
+.app-shell>main>.demo-banner,.app-shell>main>.notice{flex:0 0 auto}
+.sprint-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-bottom:28px}
+.sprint-workspace .page-heading,.sprint-workspace .sprint-bar,.sprint-workspace .view-tabs,.sprint-workspace .health,.sprint-workspace .filter-bar,.sprint-workspace .grid-status{flex:0 0 auto}
+.sprint-workspace .grid-status{flex-wrap:wrap;gap:10px}
+.sprint-workspace .grid-wrap{flex:1 1 auto;width:100%;height:auto;min-height:0;max-height:none;overflow:auto}
+.sprint-workspace .people-board{flex:1 1 auto;min-height:0;overflow:auto;align-content:start}
+.app-shell>main>.planning-page,.app-shell>main>.settings{flex:1 1 auto;min-height:0;overflow:auto}
+
+@media(max-width:700px){
+html,body{height:auto;overflow:auto}
+.app-shell{height:auto;min-height:100vh;overflow:visible}
+.app-shell>main{height:auto;min-height:100vh;overflow:visible}
+.sprint-workspace{min-height:0;overflow:visible;padding-bottom:150px}
+.sprint-workspace .grid-wrap{flex:none;height:60vh;min-height:220px;max-height:60vh}
+.sprint-workspace .people-board{flex:none;max-height:none;overflow:visible}
+}
