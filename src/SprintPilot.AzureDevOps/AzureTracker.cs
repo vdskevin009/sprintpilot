@@ -71,9 +71,11 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
  public async Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default){
   var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);var team=meta.Teams.FirstOrDefault(t=>t.Id==c.Connection.Team||t.Name==c.Connection.Team)??meta.Teams.First();
   DateRange[] Ranges(JsonNode? node)=>((JsonArray?)node??[]).Select(r=>new{Start=S(r?["start"]),End=S(r?["end"])}).Where(r=>DateTimeOffset.TryParse(r.Start,out _)&&DateTimeOffset.TryParse(r.End,out _)).Select(r=>new DateRange(DateTimeOffset.Parse(r.Start,CultureInfo.InvariantCulture),DateTimeOffset.Parse(r.End,CultureInfo.InvariantCulture))).ToArray();
-  var capacity=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/capacities",HttpMethod.Get,ct:ct);
-  var members=((JsonArray?)capacity["teamMembers"]??(JsonArray?)capacity["value"]??[]).Select(n=>{var person=n?["teamMember"];return new MemberCapacity(S(person?["id"]),S(person?["displayName"]),Ranges(n?["daysOff"]));}).Where(m=>m.PersonId!="").ToArray();
-  var teamDays=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/teamdaysoff",HttpMethod.Get,ct:ct);
+  // Capacity/days-off endpoints use the legacy 6.0 contract in this environment.
+  // Put api-version in the path and disable Send's default 7.1 query parameter.
+  var capacity=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/capacities?api-version=6.0",HttpMethod.Get,ct:ct,apiVersion:false);
+  var members=((JsonArray?)capacity["value"]??[]).Select(n=>{var person=n?["teamMember"];return new MemberCapacity(S(person?["id"]),S(person?["displayName"]),Ranges(n?["daysOff"]));}).Where(m=>m.PersonId!="").ToArray();
+  var teamDays=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/teamdaysoff?api-version=6.0",HttpMethod.Get,ct:ct,apiVersion:false);
   return new SprintCapacity(members,Ranges(teamDays["daysOff"]));
  }
  public async Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){
