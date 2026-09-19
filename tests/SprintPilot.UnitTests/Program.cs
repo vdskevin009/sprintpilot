@@ -26,7 +26,8 @@ Check(Quality.Evaluate(original,preferences,rows).Score==0,"Disabled quality rul
 Check(Quality.Similar("Handle API timeout errors","API timeout errors handle"),"Similar titles use token overlap");
 Check(!Quality.Similar("",""),"Empty titles do not cause a similarity division error");
 Check(!Quality.Issues(original with{Parent=null},meta,new Preferences(),rows,sprint).Contains("Missing parent"),"Missing parents are not treated as sprint cleanup work");
-Check(!Quality.Issues(original with{State="Done",Estimate=null},meta,new Preferences(),rows,sprint).Contains("Missing estimate"),"Completed work is not flagged as a missing estimate in cleanup");
+var demoCompletedState=meta.Types.First(t=>t.Name==original.Type).States.First(s=>s.Category=="Completed").Name;
+Check(!Quality.Issues(original with{State=demoCompletedState,Estimate=null},meta,new Preferences(),rows,sprint).Contains("Missing estimate"),"Completed work is not flagged as a missing estimate in cleanup");
 var moved=ItemChanges.Apply(rows[1],[new(ItemField.Iteration,meta.Iterations[2].Path)],meta);Check(rows[1].Iteration==sprint.Path&&moved.Iteration!=sprint.Path,"Optimistic changes preserve rollback snapshot");
 
 var example=PlanningExample.Create(new DateOnly(2026,9,15));
