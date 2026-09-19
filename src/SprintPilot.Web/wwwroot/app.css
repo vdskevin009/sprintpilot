@@ -429,3 +429,42 @@ html,body{height:auto;overflow:auto}
 .meeting-batch-actions>span{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:3px}
 .meeting-batch-actions button{font-size:10px;padding:5px 8px}
 @media(max-width:900px){.capacity-comparison{grid-template-columns:1fr}}
+
+
+/* KV Solutions product-system polish. */
+:root{
+ --kv-radius:10px;
+ --kv-radius-lg:13px;
+ --kv-space:12px;
+}
+.brand{display:flex;align-items:center;gap:9px;min-width:0}
+.brand img{width:29px;height:29px;flex:0 0 29px}
+.brand>span{display:flex;flex-direction:column;min-width:0;line-height:1.05}
+.brand>span strong{font-size:16px;font-weight:700;letter-spacing:-.02em}
+.brand>span small{font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.topbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;align-items:center}
+.topbar-product{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.topbar-product i{font-style:normal;color:var(--accent);padding:0 3px}
+.workspace-label{letter-spacing:.08em;text-transform:uppercase;font-size:9px}
+.rail .nav-button{border-radius:8px}
+.rail .nav-button.active{font-weight:600}
+.page-heading h1{letter-spacing:-.025em}
+.page-heading p{color:var(--muted);line-height:1.45}
+.home-card,.meeting-card,.planning-config,.filter-shell,.person-column{border-radius:var(--kv-radius-lg)}
+button,input,select,textarea{border-radius:7px}
+button.primary{font-weight:600}
+.eyebrow,.heading-context{letter-spacing:.07em;text-transform:uppercase;font-size:9px;font-weight:700}
+.settings h2{font-size:17px;letter-spacing:-.01em}
+.settings h3{font-size:13px}
+.settings>h2{margin-top:27px}
+.settings-tag-row,.initiative-setting-row,.capacity-override-row{background:var(--surface)}
+.sprint-workspace .page-heading.compact-heading{margin-bottom:8px}
+.sprint-workspace .people-board-heading h2{letter-spacing:-.01em}
+.sprint-workspace .person-column>header button{font-size:12px}
+.sprint-workspace .people-card{border-radius:7px}
+.planning-page .page-heading,.meeting-page .page-heading,.orchestration-home .page-heading{border-bottom:1px solid var(--border);padding-bottom:13px}
+@media(max-width:700px){
+ .topbar{grid-template-columns:minmax(0,1fr) auto}
+ .topbar-product{display:none}
+ .brand>span small{display:none}
+}
