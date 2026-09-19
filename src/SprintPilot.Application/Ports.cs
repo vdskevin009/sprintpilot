@@ -15,6 +15,8 @@ public interface IWorkTracker {
  Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default);
  Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default);
  Task<WorkItem> GetAsync(int id,CancellationToken ct=default);
+ Task<IReadOnlyList<WorkItemComment>> CommentsAsync(int id,CancellationToken ct=default);
+ Task<WorkItemComment> AddCommentAsync(int id,string text,CancellationToken ct=default);
  Task<WorkItem> UpdateAsync(ItemUpdate update,CancellationToken ct=default);
  Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default);
 }
