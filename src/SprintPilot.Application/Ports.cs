@@ -12,6 +12,7 @@ public interface IWorkTracker {
  Task<Person> TestAsync(Credentials credentials,CancellationToken ct=default);
  Task<Metadata> MetadataAsync(bool refresh=false,CancellationToken ct=default);
  Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default);
+ Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default);
  Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default);
  Task<WorkItem> GetAsync(int id,CancellationToken ct=default);
  Task<WorkItem> UpdateAsync(ItemUpdate update,CancellationToken ct=default);
