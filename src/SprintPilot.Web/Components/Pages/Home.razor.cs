@@ -403,7 +403,7 @@ __MEETING_NOTES__
    if(SelectedItems.Any(w=>busy.Contains(w.Id)||drafts.ContainsKey(w.Id)))throw new TrackerException("Wait for saves and apply or discard local drafts before using Smart Fix.");
    var apps=ApplicationTags();
    var canSuggestTags=KnownPlanningTags.Length>0;
-   smartFixGaps=SelectedItems.Select(w=>new SmartFixGap(w,apps.Length>0&&!HasApplicationTag(w),!Quality.Finished(w,meta!)&&w.Estimate is null or <=0,canSuggestTags&&w.Tags.Length==0)).Where(g=>g.MissingApplication||g.MissingEstimate||g.MissingTags).ToList();
+   smartFixGaps=SelectedItems.Select(w=>new SmartFixGap(w,apps.Length>0&&!HasApplicationTag(w),!Quality.Finished(w,meta!)&&(w.Estimate is null or <=0),canSuggestTags&&w.Tags.Length==0)).Where(g=>g.MissingApplication||g.MissingEstimate||g.MissingTags).ToList();
    if(smartFixGaps.Count==0)throw new TrackerException("The selected items have no missing application tag, estimate, or tags that Smart Fix can address.");
    smartFixSuggestions=[];smartFixCopilotText="";smartFixPrompt=BuildSmartFixPrompt();await Show("smartfix");
   }catch(Exception e){Error(e);}
