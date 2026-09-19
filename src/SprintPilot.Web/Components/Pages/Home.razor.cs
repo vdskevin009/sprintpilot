@@ -54,7 +54,7 @@ public partial class Home {
   if(screen=="cleanup"&&cleanupFilter!=""&&cleanupFilter!="Previous-sprint unfinished")rows=rows.Where(w=>Issues(w).Contains(cleanupFilter));
   Func<WorkItem,IComparable?> key=sort switch{"Order"=>w=>w.Order,"ID"=>w=>w.Id,"Type"=>w=>w.Type,"Owner"=>w=>w.Owner,"State"=>w=>w.State,"Iteration"=>w=>w.Iteration,"Area"=>w=>w.Area,"Estimate"=>w=>w.Estimate,"Priority"=>w=>w.Priority,"Parent"=>w=>w.Parent,"Tags"=>w=>string.Join(";",w.Tags),"Changed"=>w=>w.Changed,_=>w=>w.Title};return (descending?rows.OrderByDescending(key):rows.OrderBy(key)).ThenBy(w=>w.Id).ToList();
  }}
- string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item",_=>"SprintPilot"};
+ string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item","smartorder"=>"Smart order preview",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
  protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
  protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await ApplyTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}}
@@ -160,6 +160,7 @@ public partial class Home {
  void ToggleTagPill(string value)=>tagFilter=tagFilter.Equals(value,StringComparison.OrdinalIgnoreCase)?"":value;
  void OpenAttention(string key){ClearFilters();attentionFilter=key;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
  void OpenPerson(string id){ClearFilters();ownerFilters.Add(id);screen="daily";workspaceMode="People";detail=null;dailyPanelItem=null;}
+ async Task OpenSprintPerson(Iteration iteration,string id){if(meta is null)return;var index=Array.IndexOf(meta.Iterations,iteration);if(index<0)return;sprintIndex=index;ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="List";sort="Order";descending=false;detail=null;dailyPanelItem=null;await LoadSprint();}
  void OpenGroup(string tag){ClearFilters();tagFilter=tag;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
  string DefaultMeetingType()=>meta?.Types.FirstOrDefault(t=>t.Name is "Product Backlog Item" or "User Story")?.Name??meta?.Types.FirstOrDefault()?.Name??"";
  void EnsureMeetingDefaults(){if(meetingWorkType=="")meetingWorkType=DefaultMeetingType();if(meetingTitle=="")meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";}
