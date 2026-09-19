@@ -14,7 +14,7 @@ public partial class Home {
  string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
  int promptItemCount;
- string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="";
+ string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="",blockedTagsText="";
  string newType="",newTitle="",newDescription="",newAcceptance="",newArea="",newTags="",newIteration="";int? newParent;
  readonly string[] AllColumns=["Order","ID","Type","Title","Owner","State","Iteration","Area","Estimate","Priority","Parent","Tags","Changed"];
  readonly string[] QuickViews=["My Work","Team","Unassigned","Carry-over","Bugs","Recently Changed"];
@@ -48,7 +48,7 @@ public partial class Home {
  }}
  string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
- protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
+ protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
  protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await ApplyTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}}
  async Task ApplyTheme()=>await JS.InvokeVoidAsync("sprintPilot.theme",prefs.Theme);
  void Notify(string text){message=text;hasError=false;}
@@ -139,7 +139,7 @@ public partial class Home {
  async Task SaveView(){if(string.IsNullOrWhiteSpace(viewName)){dialogError="Enter a view name.";return;}prefs.Views.RemoveAll(v=>v.Name.Equals(viewName.Trim(),StringComparison.OrdinalIgnoreCase));prefs.Views.Add(new(viewName.Trim(),Filters(),prefs.Columns.ToArray()));await SaveSettings();CloseDialog();viewName="";}
  async Task LoadView(SavedView v){var f=v.Filters;search=f.GetValueOrDefault("search","");ownerFilters.Clear();foreach(var id in f.GetValueOrDefault("owners",f.GetValueOrDefault("owner","")).Split('|',StringSplitOptions.RemoveEmptyEntries))ownerFilters.Add(id);stateFilter=f.GetValueOrDefault("state","");typeFilter=f.GetValueOrDefault("type","");tagFilter=f.GetValueOrDefault("tag","");areaFilter=f.GetValueOrDefault("area","");priorityFilter=f.GetValueOrDefault("priority","");sort=f.GetValueOrDefault("sort","Order");descending=f.GetValueOrDefault("descending")=="True";prefs.Columns=v.Columns;screen="workspace";await SetQuickView(f.GetValueOrDefault("quick","Team"));}
  async Task DeleteView(SavedView v){prefs.Views.Remove(v);await SaveSettings();}
- async Task SaveSettings(){try{await Preferences.SaveAsync(prefs,lifetime.Token);await ApplyTheme();Notify("Settings saved.");}catch(Exception e){Error(e);}}
+ async Task SaveSettings(){try{prefs.BlockedTags=blockedTagsText.Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();await Preferences.SaveAsync(prefs,lifetime.Token);await ApplyTheme();Notify("Settings saved.");}catch(Exception e){Error(e);}}
  void LoadTemplate(){if(prefs.Templates.ElementAtOrDefault(templateIndex)is not {} t)return;templateName=t.Name;templateDescription=t.Description;templateAcceptance=t.Acceptance;templateTags=t.Tags;templateArea=t.Area;}
  void NewTemplate(){prefs.Templates.Add(new("New template","","","",""));templateIndex=prefs.Templates.Count-1;LoadTemplate();}
  async Task DeleteTemplate(){if(templateIndex>=0&&templateIndex<prefs.Templates.Count)prefs.Templates.RemoveAt(templateIndex);templateIndex=0;LoadTemplate();await SaveSettings();}
