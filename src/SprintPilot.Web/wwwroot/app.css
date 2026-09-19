@@ -571,3 +571,11 @@ button.primary{font-weight:600}
  .sprint-capacity-card .capacity-baseline,.sprint-capacity-card .capacity-leave,.sprint-capacity-card .missing-estimate{grid-column:1 / -1}
  .smart-fix-gaps article>header,.smart-fix-suggestions article>header{flex-direction:column;gap:4px}
 }
+
+
+/* Home install/update actions. */
+.home-actions{align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.install-app-button.ready{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--border));background:var(--accent-bg);font-weight:600}
+.update-app-button{color:var(--success);border-color:color-mix(in srgb,var(--success) 55%,var(--border));background:color-mix(in srgb,var(--success) 10%,var(--surface));font-weight:700}
+.update-app-button:hover{border-color:var(--success)}
+@media(max-width:700px){.home-actions{justify-content:flex-start}}
