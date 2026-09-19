@@ -26,6 +26,8 @@ Check(Quality.Evaluate(original,preferences,rows).Score==0,"Disabled quality rul
 Check(Quality.Similar("Handle API timeout errors","API timeout errors handle"),"Similar titles use token overlap");
 Check(!Quality.Similar("",""),"Empty titles do not cause a similarity division error");
 Check(!Quality.Issues(original with{Parent=null},meta,new Preferences(),rows,sprint).Contains("Missing parent"),"Missing parents are not treated as sprint cleanup work");
+var demoCompletedState=meta.Types.First(t=>t.Name==original.Type).States.First(s=>s.Category=="Completed").Name;
+Check(!Quality.Issues(original with{State=demoCompletedState,Estimate=null},meta,new Preferences(),rows,sprint).Contains("Missing estimate"),"Completed work is not flagged as a missing estimate in cleanup");
 var moved=ItemChanges.Apply(rows[1],[new(ItemField.Iteration,meta.Iterations[2].Path)],meta);Check(rows[1].Iteration==sprint.Path&&moved.Iteration!=sprint.Path,"Optimistic changes preserve rollback snapshot");
 
 var example=PlanningExample.Create(new DateOnly(2026,9,15));
@@ -44,6 +46,9 @@ var task=example.Items[0] with{Id=99990,Type="Task",Estimate=1000};
 var completed=example.Items[0] with{Id=99991,State="Done",Estimate=1000};
 var without=Planning.Build(example.Items.Concat([task,completed]),example.Metadata,example.Settings,example.Today,DateTimeOffset.UtcNow);
 Check(Horizon(without,PlanningHorizon.Total).KnownEstimate==572,"Tasks and completed backlog items are excluded");
+var completedMissing=example.Items[0] with{Id=99993,State="Done",OwnerId="piotr",Estimate=null};
+var withCompletedMissing=Planning.Build(example.Items.Append(completedMissing),example.Metadata,example.Settings,example.Today,DateTimeOffset.UtcNow);
+Check(Horizon(withCompletedMissing,PlanningHorizon.Current).MissingEstimates==Horizon(planning,PlanningHorizon.Current).MissingEstimates&&withCompletedMissing.People.Single(p=>p.Id=="piotr").Current.MissingEstimates==planning.People.Single(p=>p.Id=="piotr").Current.MissingEstimates,"Completed work with no estimate does not count as missing in planning or person capacity");
 var apps=Planning.Distribution(Horizon(planning,PlanningHorizon.Total),example.Settings,TagDimension.Application);
 var initiatives=Planning.Distribution(Horizon(planning,PlanningHorizon.Total),example.Settings,TagDimension.Initiative);
 Check(Math.Abs(apps.Sum(a=>a.Effort)-572)<.00001&&Math.Abs(initiatives.Sum(a=>a.Effort)-572)<.00001,"Each split dimension independently reconciles to the unique total");
