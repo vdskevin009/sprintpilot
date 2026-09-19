@@ -17,7 +17,7 @@ public record ItemUpdate(WorkItem Original, IReadOnlyList<Change> Changes);
 public record UpdateResult(int Id, WorkItem? Item, string? Error) {public bool Success=>Item is not null;}
 public record Iteration(string Id,string Name,string Path,DateTimeOffset? Start,DateTimeOffset? Finish);
 public record DateRange(DateTimeOffset Start,DateTimeOffset End);
-public record MemberCapacity(string PersonId,string PersonName,DateRange[] DaysOff);
+public record MemberCapacity(string PersonId,string PersonName,DateRange[] DaysOff,double CapacityPerDay=0);
 public record SprintCapacity(MemberCapacity[] Members,DateRange[] TeamDaysOff);
 public record Person(string Id,string Name,string UniqueName);
 public record Team(string Id,string Name);
@@ -48,9 +48,7 @@ public sealed class Preferences {
  public Dictionary<string,PlanningSettings> PlanningProfiles {get;set;}=new();
  public string Theme {get;set;}="system";
  public string[] BlockedTags {get;set;}=["Blocked by External Dependency","Waiting Feedback Business"];
- public string[] HolidayCalendarUrls {get;set;}=["https://calendar.google.com/calendar/ical/fr.be%23holiday%40group.v.calendar.google.com/public/basic.ics"];
  public Dictionary<string,InitiativeMetadata> InitiativeMetadata {get;set;}=new(StringComparer.OrdinalIgnoreCase);
- public Dictionary<int,DateOnly> DailyFollowUps {get;set;}=new();
  public string[] Columns {get;set;}=["Order","ID","Type","Title","Owner","State","Iteration","Estimate","Tags"];
  public List<SavedView> Views {get;set;}=[];
  public List<WorkTemplate> Templates {get;set;}=[new("Feature","Goal:\n\nContext:","Given … when … then …\n\nTesting:","", ""),new("Bug","Actual behavior:\n\nExpected behavior:\n\nSteps to reproduce:\n\nEnvironment:","Regression test:","Bug", ""),new("Disaster Recovery","Goal:\n\nRecovery scope:\n\nDependencies:\n\nRollback:","Recovery validation:\n\nTesting:","DR", ""),new("Technical Task","Goal:\n\nImplementation notes:\n\nDependencies:","Done when:\n\nTesting:","Technical", ""),new("Deployment","Target environment:\n\nDeployment steps:\n\nRollback:","Smoke tests:\n\nVerification:","Deployment", ""),new("Database Change","Schema or data change:\n\nCompatibility:\n\nRollback:","Migration validation:\n\nTesting:","Database", ""),new("Migration","Source:\n\nTarget:\n\nMapping:\n\nRecovery:","Reconciliation:\n\nTesting:","Migration", ""),new("API Change","Endpoint:\n\nContract change:\n\nCompatibility:","Contract tests:\n\nError scenarios:","API", "")];
