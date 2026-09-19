@@ -311,3 +311,21 @@ html,body{height:auto;overflow:auto}
  .daily-panel-fields{grid-template-columns:1fr}
  .sprint-workspace .person-column>.people-card{flex-basis:220px;height:220px}
 }
+
+
+/* Order review, Daily active filter and future time off. */
+.time-off-list{display:flex;flex-direction:column;gap:5px}
+.time-off-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px;border-radius:8px;background:var(--hover)}
+.time-off-list span{min-width:0}
+.time-off-list strong,.time-off-list small{display:block}
+.time-off-list small{color:var(--muted);font-size:10px;margin-top:2px}
+.time-off-list em{font-style:normal;font-size:10px;white-space:nowrap;color:var(--accent)}
+.order-review-banner{display:flex;align-items:center;gap:10px;padding:7px 10px;margin:0 0 6px;border:1px solid var(--accent);border-radius:8px;background:var(--accent-bg);font-size:10px;flex:0 0 auto}
+.order-review-banner strong{white-space:nowrap}
+.order-review-banner span{color:var(--muted)}
+.daily-toolbar-actions{display:flex;align-items:center;gap:6px}
+.daily-toolbar-actions button.active{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+@media(max-width:700px){
+ .order-review-banner{align-items:flex-start;flex-direction:column;gap:3px}
+ .daily-toolbar-actions{justify-content:space-between;width:100%}
+}
