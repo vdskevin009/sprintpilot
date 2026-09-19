@@ -84,3 +84,15 @@ html,body{height:auto;overflow:auto}
 .people-card.blocked .title-button{color:var(--muted)}
 .blocked-mark{display:inline-flex;margin-left:6px;padding:2px 6px;border:1px solid #c28a3b;border-radius:999px;color:#9a681f;font-size:10px;font-weight:600;line-height:1.2}
 .tag-chip.blocked-tag{background:#c28a3b22;border-color:#c28a3b66;color:#9a681f;font-weight:600}
+
+
+/* Blocked list rows and overview tag manager. */
+.grid-wrap tbody tr.blocked:not(.finished){background:#c28a3b12}
+.grid-wrap tbody tr.blocked:not(.finished):hover{background:#c28a3b20}
+.grid-wrap tbody tr.blocked:not(.finished) .title-button{color:var(--muted)}
+.planning-tag-manager{padding:18px 0 22px;border-bottom:1px solid var(--border)}
+.planning-tag-manager>header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.planning-tag-manager h2{font-size:18px;margin:0 0 5px}
+.planning-tag-manager p{font-size:12px;margin:0;color:var(--muted)}
+.planning-tag-manager table{margin-top:12px}
+.planning-tag-manager th{position:static}
