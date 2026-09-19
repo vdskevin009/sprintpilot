@@ -16,7 +16,7 @@ Check(rows[0].Id==201&&rows[0].Order==1&&rows[^1].Id==1&&rows[^1].Order==201,"Sp
 await tracker.ReorderSprintAsync("sprint","Project\\Sprint 'A'",200,201,199);
 Check(fake.ReorderCalls==1&&fake.LastReorder?["ids"]?[0]?.GetValue<int>()==200&&fake.LastReorder?["previousId"]?.GetValue<int>()==201&&fake.LastReorder?["nextId"]?.GetValue<int>()==199&&fake.LastReorder?["iterationPath"]?.ToString()=="Project\\Sprint 'A'","Sprint reorder uses the iteration-specific workitemsorder API");
 Check(rows[0].Parent==5000&&rows[0].Children.SequenceEqual(new[]{6000}),"Batch relations are retained");
-Check(rows[0].Url=="https://dev.azure.com/example/Project/_workitems/edit/1","Azure DevOps link is available when the batch omits hyperlinks");
+Check(rows[0].Url=="https://dev.azure.com/example/Project/_workitems/edit/201","Azure DevOps link is available when the batch omits hyperlinks");
 Check(fake.SawExpand,"Batch request expands fields and relationships so backlog order is populated");
 var saved=await tracker.UpdateAsync(new(rows[0],[new(ItemField.Estimate,8d)]));Check(saved.Revision==2,"Updated authoritative revision is returned");
 Check(fake.LastPatch![0]!["op"]!.ToString()=="test"&&fake.LastPatch[0]!["path"]!.ToString()=="/rev"&&fake.LastPatch[0]!["value"]!.GetValue<int>()==1,"Revision test is first patch operation");
