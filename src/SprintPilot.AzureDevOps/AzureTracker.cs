@@ -51,6 +51,8 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   var typesTask=Send(c,"_apis/wit/workitemtypes",HttpMethod.Get,ct:ct);
   var scopeTask=Send(c,$"{E(team.Id)}/_apis/work/teamsettings/teamfieldvalues",HttpMethod.Get,ct:ct);
   var meTask=TestAsync(c,ct);
+  string processOrderField="";
+  try{var process=await Send(c,"_apis/work/processconfiguration",HttpMethod.Get,ct:ct);processOrderField=S(process["typeFields"]?["Order"]?["referenceName"]);}catch(TrackerException){}
   var people=new List<Person>();for(int skip=0;;skip+=100){var page=Values(await Send(c,$"_apis/projects/{E(c.Connection.Project)}/teams/{E(team.Id)}/members?$top=100&$skip={skip}",HttpMethod.Get,ct:ct,organization:true));people.AddRange(page.Select(n=>n?["identity"]).Select(n=>new Person(S(n?["id"]),S(n?["displayName"]),S(n?["uniqueName"]))));if(page.Count<100)break;}
   DateTimeOffset? Date(JsonNode? n)=>DateTimeOffset.TryParse(S(n),out var d)?d:null;
   var iterations=Values(await iterTask).Select(n=>new Iteration(S(n?["id"]),S(n?["name"]),S(n?["path"]),Date(n?["attributes"]?["startDate"]),Date(n?["attributes"]?["finishDate"]))).OrderBy(i=>i.Start??DateTimeOffset.MaxValue).ThenBy(i=>i.Path,StringComparer.OrdinalIgnoreCase).ToArray();
@@ -61,7 +63,7 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
    var fields=((JsonArray?)detail["fields"]??[]).Select(f=>S(f?["referenceName"])).ToArray();
    var states=((JsonArray?)detail["states"]??[]).Select(s=>new StateDefinition(S(s?["name"]),S(s?["category"]))).ToArray();
    var estimate=new[]{"Microsoft.VSTS.Scheduling.StoryPoints","Microsoft.VSTS.Scheduling.Effort","Microsoft.VSTS.Scheduling.Size","Microsoft.VSTS.Scheduling.RemainingWork"}.FirstOrDefault(fields.Contains);
-   var order=new[]{"Microsoft.VSTS.Common.StackRank","Microsoft.VSTS.Common.BacklogPriority"}.FirstOrDefault(fields.Contains);
+   var order=processOrderField!=""&&fields.Contains(processOrderField)?processOrderField:new[]{"Microsoft.VSTS.Common.StackRank","Microsoft.VSTS.Common.BacklogPriority"}.FirstOrDefault(fields.Contains);
    types.Add(new(name,states,fields,estimate,order));
   }
   var scope=((JsonArray?)(await scopeTask)["values"]??[]).Select(n=>new AreaScope(S(n?["value"]),n?["includeChildren"]?.GetValue<bool>()??false)).ToArray();
