@@ -18,7 +18,7 @@ case "Estimate":<input class="number" aria-label="Estimate for @w.Id" type="numb
 case "Order":<input class="order-number" aria-label="Backlog order for @w.Id" type="number" min="0" step="1" value="@w.Order?.ToString(CultureInfo.InvariantCulture)" disabled="@(Busy.Contains(w.Id)||Meta.Types.FirstOrDefault(t=>t.Name==w.Type)?.OrderField is null)" @onchange="e=>Edit.InvokeAsync((w,ItemField.Order,e.Value?.ToString()??string.Empty))"/>break;
 case "Priority":<input class="number" aria-label="Priority for @w.Id" type="number" min="1" max="4" value="@w.Priority" disabled="@Busy.Contains(w.Id)" @onchange="e=>Edit.InvokeAsync((w,ItemField.Priority,e.Value?.ToString()??string.Empty))"/>break;
 case "Parent":@if(w.Parent is {} parentId){<button @onclick="()=>OpenParent.InvokeAsync(parentId)">#@parentId</button>}else{<span class="muted">—</span>}break;
-case "Tags":<div class="tag-cell">@foreach(var tag in w.Tags){<span class="tag-chip">@tag</span>}<input class="tag-input" list="work-grid-tags" aria-label="Tags for @w.Id, separated by semicolons" placeholder="Edit tags" value="@string.Join("; ",w.Tags)" disabled="@Busy.Contains(w.Id)" @onchange="e=>Edit.InvokeAsync((w,ItemField.Tags,e.Value?.ToString()??string.Empty))"/>@foreach(var tag in SuggestedTags(w)){<button class="tag-suggestion" title="Accept suggested tag" @onclick="()=>AcceptTag.InvokeAsync((w,tag))">+ @tag</button>}</div>break;
+case "Tags":<div class="tag-cell">@foreach(var tag in w.Tags){<span class="tag-chip">@tag <button type="button" class="tag-remove" aria-label="Remove tag @tag from work item @w.Id" title="Remove tag" disabled="@Busy.Contains(w.Id)" @onclick="()=>RemoveTag.InvokeAsync((w,tag))">×</button></span>}<input class="tag-input" list="work-grid-tags" aria-label="Tags for @w.Id, separated by semicolons" placeholder="Edit tags" value="@string.Join("; ",w.Tags)" disabled="@Busy.Contains(w.Id)" @onchange="e=>Edit.InvokeAsync((w,ItemField.Tags,e.Value?.ToString()??string.Empty))"/>@foreach(var tag in SuggestedTags(w)){<button class="tag-suggestion" title="Accept suggested tag" @onclick="()=>AcceptTag.InvokeAsync((w,tag))">+ @tag</button>}</div>break;
 case "Changed":<span class="muted" title="@w.Changed.ToString("u")">@w.Changed.ToLocalTime().ToString("MMM d, HH:mm")</span>break;
 }
 </td>}
@@ -44,6 +44,7 @@ case "Changed":<span class="muted" title="@w.Changed.ToString("u")">@w.Changed.T
 [Parameter]public EventCallback<(WorkItem Item,ItemField Field,string Value)> Edit{get;set;}
 [Parameter]public Func<WorkItem,string[]> SuggestedTags{get;set;}=_=>[];
 [Parameter]public EventCallback<(WorkItem Item,string Tag)> AcceptTag{get;set;}
+[Parameter]public EventCallback<(WorkItem Item,string Tag)> RemoveTag{get;set;}
 [Parameter]public EventCallback<int> DragStart{get;set;}
 [Parameter]public EventCallback<WorkItem> Drop{get;set;}
 string OwnerValue(WorkItem w)=>Meta.People.FirstOrDefault(p=>p.Id==w.OwnerId)?.UniqueName??w.Owner;
