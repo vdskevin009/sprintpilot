@@ -48,6 +48,7 @@ public sealed class Preferences {
  public Dictionary<string,PlanningSettings> PlanningProfiles {get;set;}=new();
  public string Theme {get;set;}="system";
  public string[] BlockedTags {get;set;}=["Blocked by External Dependency","Waiting Feedback Business"];
+ public string[] HolidayCalendarUrls {get;set;}=["https://calendar.google.com/calendar/ical/fr.be%23holiday%40group.v.calendar.google.com/public/basic.ics"];
  public Dictionary<string,InitiativeMetadata> InitiativeMetadata {get;set;}=new(StringComparer.OrdinalIgnoreCase);
  public Dictionary<int,DateOnly> DailyFollowUps {get;set;}=new();
  public string[] Columns {get;set;}=["Order","ID","Type","Title","Owner","State","Iteration","Estimate","Tags"];
