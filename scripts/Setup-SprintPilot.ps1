@@ -22,6 +22,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Integration checks failed. Setup stopped.' }
     & dotnet publish src/SprintPilot.Web -c Release --no-restore --no-self-contained -o $paths.Publish
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
+    $commit = (& git rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -eq 0 -and $commit) {
+        @{ Commit=$commit; BuiltAtUtc=(Get-Date).ToUniversalTime().ToString('o') } |
+            ConvertTo-Json -Compress |
+            Set-Content -LiteralPath (Join-Path $paths.Publish 'sprintpilot-version.json') -Encoding UTF8
+    }
 } finally { Pop-Location }
 @{ Port=$localPort } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $paths.Local 'launcher.json') -Encoding UTF8
 if (!$NoShortcut) {
