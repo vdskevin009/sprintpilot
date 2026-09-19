@@ -12,7 +12,8 @@ public partial class Home {
  bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed;
  int sprintIndex,selectionAnchor=-1,templateIndex;
  string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
- string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="";
+ string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
+ int promptItemCount;
  string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="";
  string newType="",newTitle="",newDescription="",newAcceptance="",newArea="",newTags="",newIteration="";int? newParent;
  readonly string[] AllColumns=["Order","ID","Type","Title","Owner","State","Iteration","Area","Estimate","Priority","Parent","Tags","Changed"];
@@ -45,7 +46,7 @@ public partial class Home {
   if(screen=="cleanup"&&cleanupFilter!=""&&cleanupFilter!="Previous-sprint unfinished")rows=rows.Where(w=>Issues(w).Contains(cleanupFilter));
   Func<WorkItem,IComparable?> key=sort switch{"Order"=>w=>w.Order,"ID"=>w=>w.Id,"Type"=>w=>w.Type,"Owner"=>w=>w.Owner,"State"=>w=>w.State,"Iteration"=>w=>w.Iteration,"Area"=>w=>w.Area,"Estimate"=>w=>w.Estimate,"Priority"=>w=>w.Priority,"Parent"=>w=>w.Parent,"Tags"=>w=>string.Join(";",w.Tags),"Changed"=>w=>w.Changed,_=>w=>w.Title};return (descending?rows.OrderByDescending(key):rows.OrderBy(key)).ThenBy(w=>w.Id).ToList();
  }}
- string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","create"=>"New work item",_=>"SprintPilot"};
+ string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
  protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
  protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await ApplyTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}}
@@ -110,8 +111,8 @@ public partial class Home {
  }catch(Exception e){Error(e);}finally{foreach(var p in pending)busy.Remove(p.Original.Id);applying=false;}}
  async Task RetryFailed(){applying=true;try{var failed=results.Where(r=>!r.Success).Select(r=>r.Id).ToHashSet();var next=new List<ItemUpdate>();foreach(var p in pending.Where(p=>failed.Contains(p.Original.Id))){var fresh=await Tracker.GetAsync(p.Original.Id,lifetime.Token);Replace(fresh);next.Add(new(fresh,p.Changes));}pending=next;results=[];dialogError="Review the refreshed current values before applying the retry.";}catch(Exception e){Error(e);}finally{applying=false;}}
  void PrepareNext(){if(loading||busy.Count>0){Notify("Wait for the current refresh or save to finish.");return;}if(meta?.Iterations.ElementAtOrDefault(sprintIndex+1)is null){Notify("Configure the next team sprint in Azure DevOps first.");return;}var visible=Visible.Where(w=>!Quality.Finished(w,meta)).ToArray();selected.Clear();foreach(var w in visible)selected.Add(w.Id);Notify($"{selected.Count} visible unfinished items selected. Adjust checkboxes, then use Sprint → to review the move.");}
- async Task CopySelected()=>await CopyItems(SelectedItems);
- async Task CopyItems(IEnumerable<WorkItem> source){try{var rows=source.ToArray();if(rows.Length==0)throw new TrackerException("Select work items first.");await JS.InvokeVoidAsync("sprintPilot.copy",AiReview.Export(rows,prefs.AiPrompt));Notify($"Copied {rows.Length} item(s) for AI review.");}catch(Exception e){Error(e);}}
+ async Task OpenPrompt(IEnumerable<WorkItem> source){try{var rows=source.ToArray();if(rows.Length==0)throw new TrackerException("Select work items first.");promptItemCount=rows.Length;promptText=AiReview.Export(rows,prefs.AiPrompt);await Show("prompt");}catch(Exception e){Error(e);}}
+ async Task CopyPrompt(){try{if(string.IsNullOrWhiteSpace(promptText))throw new TrackerException("The prompt is empty.");await JS.InvokeVoidAsync("sprintPilot.copy",promptText);Notify($"Copied Copilot prompt for {promptItemCount} item(s).");}catch(Exception e){Error(e);}}
  void PasteSelected()=>PasteItems(SelectedItems);
  void PasteItems(IEnumerable<WorkItem> source){aiItems=source.ToArray();if(aiItems.Length==0){Notify("Select work items first.");return;}aiText="";reviews=[];_=Show("ai");}
  void ParseAi(){try{reviews=AiReview.Parse(aiText,aiItems.Select(w=>w.Id).ToArray());dialogError="";}catch(Exception e){Error(e);}}
