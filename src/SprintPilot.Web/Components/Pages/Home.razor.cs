@@ -83,7 +83,7 @@ public partial class Home {
  void ToggleCleanupTag(string tag){if(!cleanupTagFilters.Add(tag))cleanupTagFilters.Remove(tag);}
  void SelectVisibleAndMoveNext(){selected.Clear();foreach(var w in Visible)selected.Add(w.Id);StartBulk("Next");}
  sealed record PersonLane(string Id,string Name,IReadOnlyList<WorkItem> Items);
- DateRange[] DaysOff(string personId){var capacities=capacityByIteration.Count>0?capacityByIteration.Values:[sprintCapacity];return capacities.SelectMany(c=>c.TeamDaysOff.Concat(c.Members.FirstOrDefault(m=>m.PersonId==personId)?.DaysOff??[])).GroupBy(r=>(r.Start.Date,r.End.Date)).Select(g=>g.First()).OrderBy(r=>r.Start).ToArray();}
+ DateRange[] DaysOff(string personId){IEnumerable<SprintCapacity> capacities=capacityByIteration.Count>0?capacityByIteration.Values:new[]{sprintCapacity};return capacities.SelectMany(c=>c.TeamDaysOff.Concat(c.Members.FirstOrDefault(m=>m.PersonId==personId)?.DaysOff??[])).GroupBy(r=>(r.Start.Date,r.End.Date)).Select(g=>g.First()).OrderBy(r=>r.Start).ToArray();}
  string RangeText(DateRange r)=>r.Start.Date==r.End.Date?$"{r.Start:MMM d}":$"{r.Start:MMM d}–{r.End:MMM d}";
  string DaysOffText(string personId){var ranges=DaysOff(personId);if(ranges.Length==0)return "";return string.Join(", ",ranges.Select(RangeText));}
  bool OffToday(string personId){var today=DateTimeOffset.Now.Date;return DaysOff(personId).Any(r=>today>=r.Start.Date&&today<=r.End.Date);}
