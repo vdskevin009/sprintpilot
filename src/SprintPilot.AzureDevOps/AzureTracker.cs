@@ -76,7 +76,7 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   // Capacity/days-off endpoints use the legacy 6.0 contract in this environment.
   // Put api-version in the path and disable Send's default 7.1 query parameter.
   var capacity=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/capacities?api-version=6.0",HttpMethod.Get,ct:ct,apiVersion:false);
-  var members=((JsonArray?)capacity["value"]??[]).Select(n=>{var person=n?["teamMember"];return new MemberCapacity(S(person?["id"]),S(person?["displayName"]),Ranges(n?["daysOff"]));}).Where(m=>m.PersonId!="").ToArray();
+  var members=((JsonArray?)capacity["value"]??[]).Select(n=>{var person=n?["teamMember"];var daily=((JsonArray?)n?["activities"]??[]).Select(a=>double.TryParse(S(a?["capacityPerDay"]),NumberStyles.Float,CultureInfo.InvariantCulture,out var h)&&double.IsFinite(h)&&h>0?h:0).Sum();return new MemberCapacity(S(person?["id"]),S(person?["displayName"]),Ranges(n?["daysOff"]),daily);}).Where(m=>m.PersonId!="").ToArray();
   var teamDays=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/teamdaysoff?api-version=6.0",HttpMethod.Get,ct:ct,apiVersion:false);
   return new SprintCapacity(members,Ranges(teamDays["daysOff"]));
  }
