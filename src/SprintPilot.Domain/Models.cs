@@ -16,6 +16,9 @@ public record Change(ItemField Field, object? Value);
 public record ItemUpdate(WorkItem Original, IReadOnlyList<Change> Changes);
 public record UpdateResult(int Id, WorkItem? Item, string? Error) {public bool Success=>Item is not null;}
 public record Iteration(string Id,string Name,string Path,DateTimeOffset? Start,DateTimeOffset? Finish);
+public record DateRange(DateTimeOffset Start,DateTimeOffset End);
+public record MemberCapacity(string PersonId,string PersonName,DateRange[] DaysOff);
+public record SprintCapacity(MemberCapacity[] Members,DateRange[] TeamDaysOff);
 public record Person(string Id,string Name,string UniqueName);
 public record Team(string Id,string Name);
 public record StateDefinition(string Name,string Category);
