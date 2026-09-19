@@ -1,9 +1,8 @@
 <div class="grid-wrap" id="work-grid" tabindex="0" aria-label="Sprint work items. Control A selects visible items.">
-<datalist id="work-grid-tags">@foreach(var tag in TagSuggestions){<option value="@tag"></option>}</datalist>
-<table><thead><tr><th class="check"><input type="checkbox" aria-label="Select all visible" checked="@(Items.Count>0&&Items.All(x=>Selected.Contains(x.Id)))" @onchange="()=>SelectAll.InvokeAsync()"/></th>
+<table class="@(draggingId is null?"":"drag-active")"><thead><tr><th class="check"><input type="checkbox" aria-label="Select all visible" checked="@(Items.Count>0&&Items.All(x=>Selected.Contains(x.Id)))" @onchange="()=>SelectAll.InvokeAsync()"/></th>
 @foreach(var column in Columns){<th><button class="sort" @onclick="()=>Sort.InvokeAsync(column)">@column @(SortedBy==column?(Descending?"↓":"↑"):"")</button></th>}
 </tr></thead><tbody>
-@foreach(var w in Items){<tr @key="w.Id" draggable="true" @ondragstart="()=>DragStart.InvokeAsync(w.Id)" @ondragover:preventDefault @ondrop="()=>Drop.InvokeAsync(w)" class="@(Selected.Contains(w.Id)?"selected":"") @(Busy.Contains(w.Id)?"saving":"") @(Quality.Finished(w,Meta)?"finished":"") @(Blocked(w)?"blocked":"")">
+@foreach(var w in Items){<tr @key="w.Id" data-work-item-id="@w.Id" draggable="true" @ondragstart="()=>BeginDrag(w.Id)" @ondragenter="()=>DragOver(w.Id)" @ondragover:preventDefault @ondragend="EndDrag" @ondrop="()=>DropRow(w)" class="@(Selected.Contains(w.Id)?"selected":"") @(Busy.Contains(w.Id)?"saving":"") @(Quality.Finished(w,Meta)?"finished":"") @(Blocked(w)?"blocked":"") @(draggingId==w.Id?"dragging":"") @(dragOverId==w.Id&&draggingId!=w.Id?"drop-target":"")">
 <td class="check"><input type="checkbox" aria-label="Select work item @w.Id" checked="@Selected.Contains(w.Id)" @onclick="e=>Select.InvokeAsync((w.Id,e.ShiftKey))"/></td>
 @foreach(var column in Columns){<td class="col-@column.ToLowerInvariant()">
 @switch(column){
@@ -18,7 +17,7 @@ case "Estimate":<input class="number" aria-label="Estimate for @w.Id" type="numb
 case "Order":<span class="order-number" aria-label="Sprint order for @w.Id">@(w.Order?.ToString("0",CultureInfo.InvariantCulture)??"—")</span>break;
 case "Priority":<input class="number" aria-label="Priority for @w.Id" type="number" min="1" max="4" value="@w.Priority" disabled="@Busy.Contains(w.Id)" @onchange="e=>Edit.InvokeAsync((w,ItemField.Priority,e.Value?.ToString()??string.Empty))"/>break;
 case "Parent":@if(w.Parent is {} parentId){<button @onclick="()=>OpenParent.InvokeAsync(parentId)">#@parentId</button>}else{<span class="muted">—</span>}break;
-case "Tags":<div class="tag-cell">@foreach(var tag in w.Tags){<span class="tag-chip @(BlockedTags.Contains(tag,StringComparer.OrdinalIgnoreCase)?"blocked-tag":"")">@(BlockedTags.Contains(tag,StringComparer.OrdinalIgnoreCase)?"Blocked":tag) <button type="button" class="tag-remove" aria-label="Remove tag @tag from work item @w.Id" title="Remove tag" disabled="@Busy.Contains(w.Id)" @onclick="()=>RemoveTag.InvokeAsync((w,tag))">×</button></span>}<input class="tag-input" list="work-grid-tags" aria-label="Tags for @w.Id, separated by semicolons" placeholder="Edit tags" value="@string.Join("; ",w.Tags)" disabled="@Busy.Contains(w.Id)" @onchange="e=>Edit.InvokeAsync((w,ItemField.Tags,e.Value?.ToString()??string.Empty))"/>@foreach(var tag in SuggestedTags(w)){<button class="tag-suggestion" title="Accept suggested tag" @onclick="()=>AcceptTag.InvokeAsync((w,tag))">+ @tag</button>}</div>break;
+case "Tags":<div class="tag-editor"><div class="tag-current">@foreach(var tag in w.Tags){<span class="tag-chip @(BlockedTags.Contains(tag,StringComparer.OrdinalIgnoreCase)?"blocked-tag":"")">@(BlockedTags.Contains(tag,StringComparer.OrdinalIgnoreCase)?"Blocked":tag) <button type="button" class="tag-remove" aria-label="Remove tag @tag from work item @w.Id" title="Remove tag" disabled="@Busy.Contains(w.Id)" @onclick="()=>RemoveTag.InvokeAsync((w,tag))">×</button></span>}</div><div class="tag-add-row"><input class="tag-add-input" list="@($"work-grid-tags-{w.Id}")" aria-label="Add a tag to work item @w.Id" placeholder="+ Add tag…" value="" disabled="@Busy.Contains(w.Id)" @onchange="e=>AddTagFromInput(w,e)"/><datalist id="@($"work-grid-tags-{w.Id}")">@foreach(var tag in TagSuggestions.Where(t=>!w.Tags.Contains(t,StringComparer.OrdinalIgnoreCase))){<option value="@tag"></option>}</datalist>@if(SuggestedTags(w).Length>0){<span class="tag-suggestion-label">Suggested</span>@foreach(var tag in SuggestedTags(w)){<button class="tag-suggestion" title="Add suggested tag" disabled="@Busy.Contains(w.Id)" @onclick="()=>AcceptTag.InvokeAsync((w,tag))">+ @tag</button>}}</div></div>break;
 case "Changed":<span class="muted" title="@w.Changed.ToString("u")">@w.Changed.ToLocalTime().ToString("MMM d, HH:mm")</span>break;
 }
 </td>}
@@ -48,6 +47,12 @@ case "Changed":<span class="muted" title="@w.Changed.ToString("u")">@w.Changed.T
 [Parameter]public EventCallback<(WorkItem Item,string Tag)> RemoveTag{get;set;}
 [Parameter]public EventCallback<int> DragStart{get;set;}
 [Parameter]public EventCallback<WorkItem> Drop{get;set;}
+int? draggingId,dragOverId;
+async Task BeginDrag(int id){draggingId=id;dragOverId=null;await DragStart.InvokeAsync(id);}
+void DragOver(int id){if(draggingId is not null&&draggingId!=id)dragOverId=id;}
+void EndDrag(){draggingId=null;dragOverId=null;}
+async Task DropRow(WorkItem w){try{await Drop.InvokeAsync(w);}finally{draggingId=null;dragOverId=null;}}
+async Task AddTagFromInput(WorkItem w,ChangeEventArgs e){var tag=e.Value?.ToString()?.Trim()??"";if(tag!=""&&!w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase))await AcceptTag.InvokeAsync((w,tag));}
 bool Blocked(WorkItem w)=>w.Tags.Any(t=>BlockedTags.Contains(t,StringComparer.OrdinalIgnoreCase));
 string OwnerValue(WorkItem w)=>Meta.People.FirstOrDefault(p=>p.Id==w.OwnerId)?.UniqueName??w.Owner;
 }

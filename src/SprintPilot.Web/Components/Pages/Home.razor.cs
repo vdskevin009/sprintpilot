@@ -11,7 +11,7 @@ public partial class Home {
  PlanningPage? planner;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
- bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,orderReview,smartOrdering,meetingCreating;
+ bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
  int sprintIndex,selectionAnchor=-1,templateIndex;
@@ -25,7 +25,7 @@ public partial class Home {
  readonly string[] Commands=["Next sprint","Previous sprint","Show my work","Show unassigned","Select all visible","Clear selection","Move selected to next sprint","Move selected to previous sprint","Assign selected","Add tag","Remove tag","Change state","New PBI","Refresh"];
  List<WorkItem> items=[],previousItems=[],related=[],tagHistory=[],planningItems=[],dailyLookupResults=[];SprintCapacity sprintCapacity=new([],[]);readonly Dictionary<string,List<WorkItem>> sprintCache=new();readonly Dictionary<string,SprintCapacity> capacityByIteration=new(StringComparer.OrdinalIgnoreCase);
  WorkItem? dailyPanelItem;List<WorkItemComment> dailyComments=[];List<CalendarHoliday> calendarHolidays=[];List<SmartOrderRow> smartOrderPlan=[];MeetingImport meetingImport=new();List<MeetingActionDraft> meetingActions=[];
- readonly HashSet<string> ownerFilters=new(StringComparer.OrdinalIgnoreCase);int? draggedId;
+ readonly HashSet<string> ownerFilters=new(StringComparer.OrdinalIgnoreCase);int? draggedId,pendingOrderHighlightId;
  readonly HashSet<string> cleanupTagFilters=new(StringComparer.OrdinalIgnoreCase);
  readonly HashSet<int> selected=[],busy=[];readonly Dictionary<int,ItemUpdate> drafts=new();
  List<ItemUpdate> pending=[];List<UpdateResult> results=[];WorkItem? detail;WorkItem[] aiItems=[];ReviewSection[] reviews=[];
@@ -38,7 +38,7 @@ public partial class Home {
  IEnumerable<WorkItem> AllLoaded=>items.Concat(previousItems).Concat(related).DistinctBy(w=>w.Id);
  string[] TagSuggestions=>AllLoaded.Concat(tagHistory).SelectMany(w=>w.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
  List<WorkItem> SelectedItems=>AllLoaded.Where(w=>selected.Contains(w.Id)).ToList();
- string[] WorkspaceColumns=>orderReview?["Order",..prefs.Columns.Where(c=>c!="Order")]:prefs.Columns;
+ string[] WorkspaceColumns=>prefs.Columns;
  IEnumerable<string> CommonStates {get {var sets=SelectedItems.Select(w=>meta!.Types.First(t=>t.Name==w.Type).States.Select(s=>s.Name).ToHashSet()).ToArray();if(sets.Length==0)return [];var common=sets[0];foreach(var set in sets.Skip(1))common.IntersectWith(set);return common.Order();}}
  string[] Issues(WorkItem w)=>Quality.Issues(w,meta!,prefs,AllLoaded,meta!.Iterations.FirstOrDefault(i=>i.Path==w.Iteration));
  Dictionary<string,int> CleanupCounts=>items.SelectMany(w=>Issues(w)).GroupBy(s=>s).ToDictionary(g=>g.Key,g=>g.Count()).Concat(new[]{new KeyValuePair<string,int>("Previous-sprint unfinished",previousItems.Count(w=>!Quality.Finished(w,meta!)))}).ToDictionary(x=>x.Key,x=>x.Value);
@@ -57,7 +57,7 @@ public partial class Home {
  string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item","smartorder"=>"Smart order preview",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
  protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
- protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await ApplyTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}}
+ protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await ApplyTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}if(pendingOrderHighlightId is {} movedId){pendingOrderHighlightId=null;await JS.InvokeVoidAsync("sprintPilot.orderDropSuccess",movedId);}}
  async Task ApplyTheme()=>await JS.InvokeVoidAsync("sprintPilot.theme",prefs.Theme);
  void Notify(string text){message=text;hasError=false;}
  void Error(Exception e){var text=e is TrackerException?e.Message:e is OperationCanceledException?"Operation cancelled or timed out. Refresh to confirm server state.":"The operation could not be completed. Check the connection and try again.";if(dialog!="")dialogError=text;else{message=text;hasError=true;}}
@@ -240,7 +240,7 @@ public partial class Home {
  void ToggleStatePill(string value)=>stateFilter=stateFilter.Equals(value,StringComparison.OrdinalIgnoreCase)?"":value;
  void ToggleTagPill(string value)=>tagFilter=tagFilter.Equals(value,StringComparison.OrdinalIgnoreCase)?"":value;
  void OpenAttention(string key){ClearFilters();attentionFilter=key;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
- void OpenPerson(string id){ClearFilters();ownerFilters.Add(id);screen="daily";workspaceMode="People";detail=null;dailyPanelItem=null;}
+ void OpenPerson(string id){ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="List";sort="Order";descending=false;detail=null;dailyPanelItem=null;}
  async Task OpenSprintPerson(Iteration iteration,string id){if(meta is null)return;var index=Array.IndexOf(meta.Iterations,iteration);if(index<0)return;sprintIndex=index;ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="List";sort="Order";descending=false;detail=null;dailyPanelItem=null;await LoadSprint();}
  void OpenGroup(string tag){ClearFilters();tagFilter=tag;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
  string DefaultMeetingType()=>meta?.Types.FirstOrDefault(t=>t.Name is "Product Backlog Item" or "User Story")?.Name??meta?.Types.FirstOrDefault()?.Name??"";
@@ -325,7 +325,17 @@ __MEETING_NOTES__
  Task AddSuggestedTag((WorkItem Item,string Tag) value)=>InlineEdit((value.Item,ItemField.Tags,string.Join("; ",value.Item.Tags.Append(value.Tag).Distinct(StringComparer.OrdinalIgnoreCase))));
  Task RemoveTag((WorkItem Item,string Tag) value)=>InlineEdit((value.Item,ItemField.Tags,string.Join("; ",value.Item.Tags.Where(t=>!t.Equals(value.Tag,StringComparison.OrdinalIgnoreCase)))));
  bool CanOrder(WorkItem w)=>CurrentSprint is not null&&w.Iteration.Equals(CurrentSprint.Path,StringComparison.OrdinalIgnoreCase);
- async Task<bool> VerifySprintOrder(IReadOnlyList<int> expected){sprintCache.Clear();await LoadSprint();sort="Order";descending=false;var actual=items.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).Select(w=>w.Id).ToArray();return actual.SequenceEqual(expected);}
+ async Task<bool> VerifySprintOrder(IReadOnlyList<int> expected){
+  if(CurrentSprint is not {} sprint)return false;
+  var refreshed=(await Tracker.SprintAsync(sprint.Path,lifetime.Token)).ToList();
+  var actual=refreshed.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).Select(w=>w.Id).ToArray();
+  sort="Order";descending=false;sprintCache.Clear();
+  if(!actual.SequenceEqual(expected)){items=refreshed;sprintCache[sprint.Path]=[..items];return false;}
+  var positions=expected.Select((id,index)=>(id,order:(double)index+1)).ToDictionary(x=>x.id,x=>x.order);
+  for(var i=0;i<items.Count;i++)if(positions.TryGetValue(items[i].Id,out var order))items[i]=items[i] with{Order=order};
+  sprintCache[sprint.Path]=[..items];
+  return true;
+ }
  async Task<bool> MoveSprintItem(IReadOnlyList<WorkItem> ordered,int movedId){
   if(CurrentSprint is not {} sprint)return false;
   var expected=ordered.Select(w=>w.Id).ToArray();var index=Array.IndexOf(expected,movedId);if(index<0)return false;
@@ -337,18 +347,17 @@ __MEETING_NOTES__
   try{for(var i=0;i<expected.Length;i++){var previous=i==0?0:expected[i-1];var next=i==expected.Length-1?0:expected[i+1];await Tracker.ReorderSprintAsync(sprint.Id,sprint.Path,expected[i],previous,next,lifetime.Token);}return await VerifySprintOrder(expected);}
   finally{foreach(var id in expected)busy.Remove(id);}
  }
- void DragStart(int id)=>draggedId=id;
- async Task DropOn(WorkItem target){if(draggedId is not {} sourceId||sourceId==target.Id)return;var ordered=items.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();var source=ordered.FirstOrDefault(w=>w.Id==sourceId);if(source is null||!CanOrder(target)){draggedId=null;return;}ordered.Remove(source);var targetIndex=ordered.IndexOf(target);if(targetIndex<0){draggedId=null;return;}ordered.Insert(targetIndex,source);draggedId=null;try{var verified=await MoveSprintItem(ordered,sourceId);Notify(verified?"Sprint order updated in Azure DevOps.":"Azure DevOps returned a different sprint order. The sprint was refreshed; review the current order.");}catch(Exception e){Error(e);sprintCache.Clear();try{await LoadSprint();}catch{}}}
+ void DragStart(int id){selected.Clear();selectionAnchor=-1;draggedId=id;}
+ async Task DropOn(WorkItem target){if(draggedId is not {} sourceId||sourceId==target.Id)return;var ordered=items.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();var source=ordered.FirstOrDefault(w=>w.Id==sourceId);if(source is null||!CanOrder(target)){draggedId=null;return;}ordered.Remove(source);var targetIndex=ordered.IndexOf(target);if(targetIndex<0){draggedId=null;return;}ordered.Insert(targetIndex,source);draggedId=null;try{var verified=await MoveSprintItem(ordered,sourceId);if(verified){pendingOrderHighlightId=sourceId;await InvokeAsync(StateHasChanged);}Notify(verified?"Sprint order updated in Azure DevOps.":"Azure DevOps returned a different sprint order. The sprint was refreshed; review the current order.");}catch(Exception e){Error(e);sprintCache.Clear();try{await LoadSprint();}catch{}}}
  void DailyDragStart(WorkItem w){if(CanOrder(w))draggedId=w.Id;}
  async Task DailyDropOn(WorkItem target){if(draggedId is not {} id||id==target.Id)return;var source=items.FirstOrDefault(w=>w.Id==id);if(source is null){draggedId=null;return;}if(source.OwnerId!=target.OwnerId){draggedId=null;Notify("Reorder within the same person. Reassign the item first to move it to another person.");return;}if(WorkGroupRank(source)!=WorkGroupRank(target)){draggedId=null;Notify("Done, blocked and active work stay in separate groups. Reorder within the same group.");return;}await DropOn(target);}
- void SetScreen(string target){screen=target;detail=null;dailyPanelItem=null;if(target=="daily"){workspaceMode="People";quickView="Team";attentionFilter="";orderReview=false;}else if(target=="workspace"){workspaceMode="List";sort="Order";descending=false;}else if(target=="cleanup")workspaceMode="List";else if(target=="meeting")EnsureMeetingDefaults();if(target!="workspace")orderReview=false;}
- void ToggleOrderReview(){orderReview=!orderReview;if(orderReview){ClearFilters();screen="workspace";workspaceMode="List";sort="Order";descending=false;selected.Clear();}}
+ void SetScreen(string target){screen=target;detail=null;dailyPanelItem=null;if(target=="daily"){workspaceMode="People";quickView="Team";attentionFilter="";}else if(target=="workspace"){workspaceMode="List";sort="Order";descending=false;}else if(target=="cleanup")workspaceMode="List";else if(target=="meeting")EnsureMeetingDefaults();}
  List<SmartOrderRow> BuildSmartOrderPlan(){var ordered=items.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();var owners=ordered.Select(w=>w.OwnerId).Distinct().OrderBy(id=>id==""?1:0).ThenBy(id=>ordered.FindIndex(w=>w.OwnerId==id)).ToArray();var result=new List<SmartOrderRow>();foreach(var owner in owners){foreach(var w in ordered.Where(w=>w.OwnerId==owner).OrderBy(WorkGroupRank).ThenBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id))result.Add(new(result.Count+1,w,PersonName(owner),WorkGroupName(w)));}return result;}
  void PrepareSmartOrder(){smartOrderPlan=BuildSmartOrderPlan();if(smartOrderPlan.Count==0){Notify("No orderable work items were found in this sprint.");return;}dialog="smartorder";dialogError="";focusDialog=true;}
  async Task ApplySmartOrder(){if(smartOrdering)return;smartOrdering=true;dialogError="";try{var verified=await PersistSprintOrder(smartOrderPlan.Select(x=>x.Item).ToArray());if(!verified){dialogError="Azure DevOps returned a different order after the update. The sprint was refreshed; review the current order before retrying.";return;}dialog="";Notify("Smart order applied and verified in Azure DevOps.");}catch(Exception e){sprintCache.Clear();try{await LoadSprint();}catch{}dialogError=e is TrackerException?e.Message:"Smart order could not be fully applied. The sprint was refreshed; review the current Azure DevOps order before retrying.";}finally{smartOrdering=false;}}
  void ToggleDailyActiveOnly()=>dailyActiveOnly=!dailyActiveOnly;
  async Task OpenCleanup(){screen="cleanup";workspaceMode="List";ClearFilters();await LoadSprint();}
- void Sort(string column){if(orderReview&&column!="Order")orderReview=false;if(sort==column)descending=!descending;else{sort=column;descending=false;}}
+ void Sort(string column){if(sort==column)descending=!descending;else{sort=column;descending=false;}}
  void Select((int Id,bool Shift) e){var visible=Visible;var index=visible.FindIndex(w=>w.Id==e.Id);if(e.Shift&&selectionAnchor>=0){var anchor=visible.FindIndex(w=>w.Id==selectionAnchor);if(anchor>=0){for(int i=Math.Min(anchor,index);i<=Math.Max(anchor,index);i++)selected.Add(visible[i].Id);return;}}if(!selected.Add(e.Id))selected.Remove(e.Id);selectionAnchor=e.Id;}
  void ToggleAll(){var visible=Visible;if(visible.All(w=>selected.Contains(w.Id)))foreach(var w in visible)selected.Remove(w.Id);else foreach(var w in visible)selected.Add(w.Id);}
  void OpenDetail(WorkItem w){dailyPanelItem=null;detail=w;}
