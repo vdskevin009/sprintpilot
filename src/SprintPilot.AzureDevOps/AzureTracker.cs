@@ -84,10 +84,12 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);
   if(meta.Scope.Length==0)throw new TrackerException("The selected team has no configured area paths.");
   var scopes=string.Join(" OR ",meta.Scope.Select(a=>$"[System.AreaPath] {(a.IncludeChildren?"UNDER":"=")} '{WiqlLiteral(a.Path)}'"));
-  var n=await Send(c,"_apis/wit/wiql",HttpMethod.Post,new{query=$"SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.IterationPath] = '{WiqlLiteral(iteration)}' AND ({scopes}) ORDER BY [System.Id]"},ct:ct);
+  var orderField=meta.Types.Select(t=>t.OrderField).FirstOrDefault(f=>!string.IsNullOrWhiteSpace(f));
+  var orderBy=orderField is null?"[System.Id]":$"[{orderField}], [System.Id]";
+  var n=await Send(c,"_apis/wit/wiql",HttpMethod.Post,new{query=$"SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.IterationPath] = '{WiqlLiteral(iteration)}' AND ({scopes}) ORDER BY {orderBy}"},ct:ct);
   var ids=((JsonArray?)n["workItems"]??[]).Select(x=>x!["id"]!.GetValue<int>()).ToArray();var items=new List<WorkItem>();
-  foreach(var chunk in ids.Chunk(200)){var batch=await Send(c,"_apis/wit/workitemsbatch",HttpMethod.Post,new Dictionary<string,object>{["ids"]=chunk,["$expand"]="Relations",["errorPolicy"]="Fail"},ct:ct);items.AddRange(Values(batch).Select(Map));}
-  return items;
+  foreach(var chunk in ids.Chunk(200)){var batch=await Send(c,"_apis/wit/workitemsbatch",HttpMethod.Post,new Dictionary<string,object>{["ids"]=chunk,["$expand"]="All",["errorPolicy"]="Fail"},ct:ct);items.AddRange(Values(batch).Select(Map));}
+  return items.OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToArray();
  }
 
  public async Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default)
@@ -111,7 +113,7 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
    if(ids[0]<=lastId)throw new TrackerException("Planning pagination did not advance. Refresh and try again.");
    if(rows.Count+ids.Length>50000)throw new TrackerException("Planning exceeds 50,000 items. Narrow the team's area scope; no partial dashboard was shown.");
    foreach(var chunk in ids.Chunk(200)){
-    var batch=await Send(c,"_apis/wit/workitemsbatch",HttpMethod.Post,new Dictionary<string,object>{["ids"]=chunk,["$expand"]="Relations",["errorPolicy"]="Fail"},ct:ct);
+    var batch=await Send(c,"_apis/wit/workitemsbatch",HttpMethod.Post,new Dictionary<string,object>{["ids"]=chunk,["$expand"]="All",["errorPolicy"]="Fail"},ct:ct);
     var values=Values(batch);if(values.Count!=chunk.Length)throw new TrackerException("Some planning items could not be read. No partial dashboard was shown.");
     rows.AddRange(values.Select(Map));
    }
@@ -124,7 +126,7 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   var relations=(JsonArray?)n?["relations"]??[];int? Id(JsonNode? rel)=>int.TryParse(S(rel?["url"]).Split('/').Last(),out var x)?x:null;
   var order=cached?.Types.FirstOrDefault(t=>t.Name==type)?.OrderField;var owner=f?["System.AssignedTo"];return new(){NumericFields=(f as JsonObject)?.Where(kv=>kv.Value is JsonValue v&&v.TryGetValue<double>(out _)).ToDictionary(kv=>kv.Key,kv=>kv.Value!.GetValue<double>())??new(),Id=n?["id"]?.GetValue<int>()??0,Revision=n?["rev"]?.GetValue<int>()??0,CommentCount=Number("System.CommentCount")??0,Type=type,Title=Field("System.Title"),Owner=owner is JsonObject?S(owner["displayName"]):S(owner),OwnerId=owner is JsonObject?S(owner["id"]):"",State=Field("System.State"),Iteration=Field("System.IterationPath"),Area=Field("System.AreaPath"),Estimate=estimate is not null && double.TryParse(Field(estimate),NumberStyles.Float,CultureInfo.InvariantCulture,out var e)?e:null,Order=order is not null&&double.TryParse(Field(order),NumberStyles.Float,CultureInfo.InvariantCulture,out var rank)?rank:null,Priority=Number("Microsoft.VSTS.Common.Priority"),Description=Field("System.Description"),Acceptance=Field("Microsoft.VSTS.Common.AcceptanceCriteria"),Parent=Id(relations.FirstOrDefault(r=>S(r?["rel"])=="System.LinkTypes.Hierarchy-Reverse")),Children=relations.Where(r=>S(r?["rel"])=="System.LinkTypes.Hierarchy-Forward").Select(Id).OfType<int>().ToArray(),Tags=Field("System.Tags").Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries),Changed=DateTimeOffset.TryParse(Field("System.ChangedDate"),out var changed)?changed:default,Url=S(n?["_links"]?["html"]?["href"]) is {Length:>0} link?link:activeConnection is {} connection?$"https://dev.azure.com/{E(connection.Organization)}/{E(connection.Project)}/_workitems/edit/{n?["id"]}":""};
  }
- public async Task<WorkItem> GetAsync(int id,CancellationToken ct=default){var c=await Credentials(ct);await MetadataAsync(ct:ct);return Map(await Send(c,$"_apis/wit/workitems/{id}?$expand=Relations",HttpMethod.Get,ct:ct));}
+ public async Task<WorkItem> GetAsync(int id,CancellationToken ct=default){var c=await Credentials(ct);await MetadataAsync(ct:ct);return Map(await Send(c,$"_apis/wit/workitems/{id}?$expand=All",HttpMethod.Get,ct:ct));}
  WorkItemComment MapComment(JsonNode? n){DateTimeOffset.TryParse(S(n?["createdDate"]),out var created);return new(n?["id"]?.GetValue<int>()??0,S(n?["text"]),S(n?["createdBy"]?["displayName"]),created);}
  public async Task<IReadOnlyList<WorkItemComment>> CommentsAsync(int id,CancellationToken ct=default){var c=await Credentials(ct);var n=await Send(c,$"_apis/wit/workItems/{id}/comments?$top=100&api-version=7.1-preview.4",HttpMethod.Get,ct:ct,apiVersion:false);return ((JsonArray?)n["comments"]??(JsonArray?)n["value"]??[]).Select(MapComment).OrderBy(x=>x.Created).ToArray();}
  public async Task<WorkItemComment> AddCommentAsync(int id,string text,CancellationToken ct=default){if(string.IsNullOrWhiteSpace(text))throw new TrackerException("Enter a comment first.");var c=await Credentials(ct);var n=await Send(c,$"_apis/wit/workItems/{id}/comments?api-version=7.1-preview.4",HttpMethod.Post,new{text=text.Trim()},ct:ct,apiVersion:false);return MapComment(n);}
@@ -132,6 +134,6 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
  async Task<List<object>> Patch(string type,IReadOnlyList<Change> changes,CancellationToken ct){var meta=await MetadataAsync(ct:ct);var definition=meta.Types.FirstOrDefault(t=>t.Name==type)??throw new TrackerException("Unsupported work-item type.");var patch=new List<object>();
   foreach(var change in changes){var field=FieldName(change.Field,definition);if(!definition.Fields.Contains(field))throw new TrackerException($"{type} does not support {change.Field}. No update was sent.");patch.Add(new{op="add",path="/fields/"+field,value=change.Value});}return patch;
  }
- public async Task<WorkItem> UpdateAsync(ItemUpdate update,CancellationToken ct=default){var c=await Credentials(ct);var patch=await Patch(update.Original.Type,update.Changes,ct);patch.Insert(0,new{op="test",path="/rev",value=update.Original.Revision});return Map(await Send(c,$"_apis/wit/workitems/{update.Original.Id}?$expand=Relations",HttpMethod.Patch,patch,true,ct));}
- public async Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default){var c=await Credentials(ct);var patch=await Patch(type,changes,ct);if(parent is {} id)patch.Add(new{op="add",path="/relations/-",value=new{rel="System.LinkTypes.Hierarchy-Reverse",url=$"https://dev.azure.com/{E(c.Connection.Organization)}/_apis/wit/workItems/{id}"}});return Map(await Send(c,"_apis/wit/workitems/$"+E(type)+"?$expand=Relations",HttpMethod.Post,patch,true,ct));}
+ public async Task<WorkItem> UpdateAsync(ItemUpdate update,CancellationToken ct=default){var c=await Credentials(ct);var patch=await Patch(update.Original.Type,update.Changes,ct);patch.Insert(0,new{op="test",path="/rev",value=update.Original.Revision});return Map(await Send(c,$"_apis/wit/workitems/{update.Original.Id}?$expand=All",HttpMethod.Patch,patch,true,ct));}
+ public async Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default){var c=await Credentials(ct);var patch=await Patch(type,changes,ct);if(parent is {} id)patch.Add(new{op="add",path="/relations/-",value=new{rel="System.LinkTypes.Hierarchy-Reverse",url=$"https://dev.azure.com/{E(c.Connection.Organization)}/_apis/wit/workItems/{id}"}});return Map(await Send(c,"_apis/wit/workitems/$"+E(type)+"?$expand=All",HttpMethod.Post,patch,true,ct));}
 }

@@ -93,8 +93,36 @@ public partial class Home {
  bool InSelectedSprint(DateRange r)=>CurrentSprint?.Start is {} start&&CurrentSprint.Finish is {} finish&&r.End.Date>=start.Date&&r.Start.Date<=finish.Date;
  DateRange? NextDaysOff(string personId,Iteration? iteration=null){var today=DateTimeOffset.Now.Date;IEnumerable<DateRange> rows=DaysOff(personId).Where(r=>r.End.Date>=today);if(iteration?.Start is {} start&&iteration.Finish is {} finish)rows=rows.Where(r=>r.End.Date>=start.Date&&r.Start.Date<=finish.Date);return rows.OrderBy(r=>r.Start).FirstOrDefault();}
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> UpcomingDaysOff(){if(meta is null)return [];var today=DateTimeOffset.Now.Date;var rows=new List<(string,string,DateRange)>();foreach(var p in meta.People){foreach(var r in DaysOff(p.Id).Where(r=>r.End.Date>=today))rows.Add((p.Id,p.Name,r));}return rows.Distinct().OrderBy(x=>x.Item3.Start).ToList();}
- IReadOnlyList<(string PersonId,string Name,DateRange Range)> HomeDaysOff(){var rows=UpcomingDaysOff().GroupBy(x=>x.PersonId).Select(g=>g.OrderBy(x=>x.Range.Start).First());return rows.OrderBy(x=>x.PersonId==meta?.Me.Id?0:1).ThenBy(x=>x.Range.Start).ToList();}
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> VisibleDaysOff(){var rows=UpcomingDaysOff();return showAllDaysOff?rows:rows.Take(1).ToList();}
+ sealed record HomeTimeOffDay(DateOnly Date,string Title,string[] Sources);
+ IReadOnlyList<HomeTimeOffDay> HomeTimeOffDays(){
+  var today=DateOnly.FromDateTime(DateTime.Now);
+  var rows=new Dictionary<DateOnly,(HashSet<string> Labels,HashSet<string> Sources)>();
+  void Add(DateOnly day,string label,string source){
+   if(day<today)return;
+   if(!rows.TryGetValue(day,out var row)){row=(new(StringComparer.OrdinalIgnoreCase),new(StringComparer.OrdinalIgnoreCase));rows[day]=row;}
+   if(!string.IsNullOrWhiteSpace(label))row.Labels.Add(label.Trim());
+   row.Sources.Add(source);
+  }
+  foreach(var leave in UpcomingDaysOff()){
+   var from=DateOnly.FromDateTime(leave.Range.Start.Date);if(from<today)from=today;
+   var to=DateOnly.FromDateTime(leave.Range.End.Date);
+   for(var day=from;day<=to;day=day.AddDays(1)){if(day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)continue;Add(day,leave.Name,"Day off");}
+  }
+  foreach(var holiday in UpcomingHolidays()){
+   var from=holiday.Start<today?today:holiday.Start;
+   for(var day=from;day<=holiday.End;day=day.AddDays(1))Add(day,holiday.Name,holiday.Country);
+  }
+  var allHolidaySources=HolidayCountries.Select(c=>c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+  return rows.OrderBy(x=>x.Key).Select(x=>{
+   var sources=x.Value.Sources;
+   string[] pills;
+   if(allHolidaySources.All(s=>sources.Contains(s)))pills=sources.Contains("Day off")?["All","Day off"]:["All"];
+   else pills=HolidayCountries.Select(c=>c.Name).Where(s=>sources.Contains(s)).Concat(sources.Contains("Day off")?["Day off"]:Array.Empty<string>()).ToArray();
+   return new HomeTimeOffDay(x.Key,string.Join(" · ",x.Value.Labels.OrderBy(s=>s,StringComparer.OrdinalIgnoreCase)),pills);
+  }).ToList();
+ }
+ string TimeOffDateText(DateOnly day)=>day.Year==DateTime.Now.Year?day.ToString("MMM d"):day.ToString("MMM d, yyyy");
  sealed record HolidayCountry(string Code,string Name,string ApiCode,string? Subdivision=null);
  static readonly HolidayCountry[] HolidayCountries=[
   new("BE","Belgium","BE"),
@@ -144,6 +172,7 @@ public partial class Home {
  int HiddenDaysOffCount()=>Math.Max(0,UpcomingDaysOff().Count+UpcomingHolidays().Count-VisibleDaysOff().Count-VisibleHolidays().Count);
  string HolidayCalendarForPerson(string personId)=>PlanningPrefs.HolidayCalendarByPerson.GetValueOrDefault(personId,"");
  string HolidayCalendarName(string personId){var code=HolidayCalendarForPerson(personId);return HolidayCountries.FirstOrDefault(c=>c.Code==code)?.Name??"";}
+ string CapacityBaselineText(string personId,Iteration? iteration){var text=$"{ConfiguredCapacityHours(personId,iteration):0.#}h sprint";var calendar=HolidayCalendarName(personId);return calendar==""?text:$"{text} · {calendar}";}
  HashSet<DateOnly> UnavailableWorkingDates(string personId,Iteration iteration){
   var dates=new HashSet<DateOnly>();
   if(iteration.Start is not {} start||iteration.Finish is not {} finish)return dates;
@@ -200,7 +229,7 @@ public partial class Home {
  sealed class MeetingActionDraft {public bool Selected {get;set;}=true;public string Title {get;set;}="";public string Description {get;set;}="";public string AcceptanceCriteria {get;set;}="";public string Owner {get;set;}="";public string Sprint {get;set;}="current";public double? SuggestedEstimate {get;set;}public string TagsText {get;set;}="";public int? CreatedId {get;set;}public string CreatedUrl {get;set;}="";}
  IReadOnlyList<AttentionRow> HomeAttention(){var rows=CurrentOpenItems.ToArray();var list=new List<AttentionRow>();void Add(string key,string label,int count,string hint){if(count>0)list.Add(new(key,label,count,hint));}Add("blocked","Blocked work",rows.Count(Blocked),"Needs an unblock or dependency decision");Add("unassigned","Unassigned",rows.Count(w=>w.OwnerId==""),"Give the work a clear owner");if(ApplicationTags().Length>0)Add("missing-app","Missing application tag",rows.Count(w=>!HasApplicationTag(w)),"Classify work so application load stays useful");if(InitiativeTags().Length>0)Add("missing-initiative","Missing initiative tag",rows.Count(w=>!HasInitiativeTag(w)),"Keep initiative scope visible");Add("stale","Stagnating work",rows.Count(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),$"No change for more than {prefs.StaleDays} days");return list;}
  List<HomeGroup> Remaining(TagDimension dimension){var configured=PlanningPrefs.Tags.Where(t=>dimension==TagDimension.Application?t.Application:t.Initiative).Select(t=>t.Tag).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();return configured.Select(tag=>{var rows=OpenPlanningItems.Where(w=>w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)).ToArray();return new HomeGroup(tag,rows.Length,rows.Sum(w=>Planning.Estimate(w,PlanningPrefs)??0));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Count).ThenBy(x=>x.Name).ToList();}
- List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":missing>0?"Estimates missing":effort>capacity?"Over capacity":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
+ List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":missing>0?"Estimates missing":effort>capacity?"Over capacity":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
  InitiativeMetadata Initiative(string tag){var key=prefs.InitiativeMetadata.Keys.FirstOrDefault(k=>k.Equals(tag,StringComparison.OrdinalIgnoreCase));if(key is not null)return prefs.InitiativeMetadata[key];var value=new InitiativeMetadata();prefs.InitiativeMetadata[tag]=value;return value;}
  List<InitiativeRow> InitiativeRows(){var today=DateOnly.FromDateTime(DateTime.Now);return Remaining(TagDimension.Initiative).Select(g=>{var m=Initiative(g.Name);var attention=m.Status is "At Risk" or "Blocked"||m.Confidence=="Low"||(m.DueDate is {} due&&due<=today.AddDays(14));return new InitiativeRow(g.Name,g.Count,g.Effort,m,attention);}).OrderByDescending(x=>x.NeedsAttention).ThenBy(x=>x.Meta.DueDate??DateOnly.MaxValue).ThenBy(x=>x.Tag).ToList();}
  IEnumerable<(string Id,string Name,int Count)> FilterPeople=>items.GroupBy(w=>w.OwnerId).Select(g=>(Id:g.Key,Name:PersonName(g.Key),Count:g.Count())).Where(x=>filterOptionSearch==""||x.Name.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Name=="Unassigned").ThenBy(x=>x.Name);

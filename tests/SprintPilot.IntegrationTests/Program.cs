@@ -12,10 +12,11 @@ Check(fake.SawConnectionDataParameters,"Connection test supplies Azure DevOps sy
 var calls=fake.Calls;await tracker.MetadataAsync();Check(fake.Calls==calls,"Metadata cache suppresses repeated requests");
 var capacity=await tracker.CapacityAsync("sprint");Check(capacity.Members.Single().CapacityPerDay==6,"Azure DevOps capacity-per-day is retained");Check(capacity.Members.Single().DaysOff.Length==1,"Azure DevOps member days off are retained");
 var rows=await tracker.SprintAsync("Project\\Sprint 'A'");Check(rows.Count==201&&fake.BatchSizes.SequenceEqual(new[]{200,1}),"Read batching respects 200-item limit");
-Check(fake.LastWiql.Contains("Sprint ''A''")&&fake.LastWiql.Contains("[System.AreaPath] UNDER 'Project'"),"WIQL escapes literals and restricts team areas");
+Check(fake.LastWiql.Contains("Sprint ''A''")&&fake.LastWiql.Contains("[System.AreaPath] UNDER 'Project'")&&fake.LastWiql.Contains("ORDER BY [Microsoft.VSTS.Common.BacklogPriority]"),"Sprint WIQL uses the configured Azure DevOps backlog-order field");
+Check(rows[0].Order==900,"Sprint read includes the Azure DevOps backlog order value");
 Check(rows[0].Parent==5000&&rows[0].Children.SequenceEqual(new[]{6000}),"Batch relations are retained");
 Check(rows[0].Url=="https://dev.azure.com/example/Project/_workitems/edit/1","Azure DevOps link is available when the batch omits hyperlinks");
-Check(fake.SawExpand,"Batch request uses $expand for relationships");
+Check(fake.SawExpand,"Batch request expands fields and relationships so backlog order is populated");
 var saved=await tracker.UpdateAsync(new(rows[0],[new(ItemField.Estimate,8d)]));Check(saved.Revision==2,"Updated authoritative revision is returned");
 Check(fake.LastPatch![0]!["op"]!.ToString()=="test"&&fake.LastPatch[0]!["path"]!.ToString()=="/rev"&&fake.LastPatch[0]!["value"]!.GetValue<int>()==1,"Revision test is first patch operation");
 Check(fake.LastPatch[1]!["path"]!.ToString()=="/fields/Microsoft.VSTS.Scheduling.Effort","Patch uses discovered process field");
@@ -59,7 +60,7 @@ sealed class FakeAzure:HttpMessageHandler {
   else if(p.EndsWith("/workitemtypes"))n=JsonNode.Parse("""{"value":[{"name":"Product Backlog Item"}]}""")!;
   else if(p.Contains("/workitemtypes/"))n=JsonNode.Parse("""{"fields":[{"referenceName":"System.Title"},{"referenceName":"Microsoft.VSTS.Scheduling.Effort"},{"referenceName":"Microsoft.VSTS.Common.StackRank"},{"referenceName":"Microsoft.VSTS.Common.BacklogPriority"}],"states":[{"name":"New","category":"Proposed"},{"name":"Done","category":"Completed"}]}""")!;
   else if(p.EndsWith("/wiql")){LastWiql=JsonNode.Parse(body)!["query"]!.ToString();var start=Paging?int.Parse(System.Text.RegularExpressions.Regex.Match(LastWiql,@"\[System.Id\] > (\d+)").Groups[1].Value)+1:1;var length=Paging?(start==1?2000:3):201;n=new JsonObject{["workItems"]=new JsonArray(Enumerable.Range(start,length).Select(i=>(JsonNode)new JsonObject{["id"]=i}).ToArray())};}
-  else if(p.EndsWith("/workitemsbatch")){var b=JsonNode.Parse(body)!;var ids=b["ids"]!.AsArray();BatchSizes.Add(ids.Count);SawExpand=b["$expand"]?.ToString()=="Relations";n=new JsonObject{["value"]=new JsonArray(ids.Take(OmitOne?Math.Max(0,ids.Count-1):ids.Count).Select(i=>(JsonNode)Item(i!.GetValue<int>())).ToArray())};}
+  else if(p.EndsWith("/workitemsbatch")){var b=JsonNode.Parse(body)!;var ids=b["ids"]!.AsArray();BatchSizes.Add(ids.Count);SawExpand=b["$expand"]?.ToString()=="All";n=new JsonObject{["value"]=new JsonArray(ids.Take(OmitOne?Math.Max(0,ids.Count-1):ids.Count).Select(i=>(JsonNode)Item(i!.GetValue<int>())).ToArray())};}
   else n=new JsonObject{["id"]="project"};
   return new(HttpStatusCode.OK){Content=new StringContent(n.ToJsonString(),Encoding.UTF8,"application/json")};
  }

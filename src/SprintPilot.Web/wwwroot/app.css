@@ -511,3 +511,11 @@ button.primary{font-weight:600}
  .capacity-person-setting>strong,.capacity-person-setting>.text-button{grid-column:1 / -1}
  .sprint-workspace .person-column{height:520px;max-height:520px;flex-basis:280px;min-width:280px}
 }
+
+
+/* Home time-off timeline: one chronological row per calendar day. */
+.time-off-day>span{display:flex;flex-direction:column;gap:5px;min-width:0}
+.time-off-day strong{white-space:normal;overflow-wrap:anywhere}
+.time-off-day time{font-size:10px;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+.time-off-source-pills{display:flex!important;flex-direction:row!important;align-items:center;gap:4px;flex-wrap:wrap}
+.time-off-source-pill{display:inline-flex;font-style:normal;font-size:9px;line-height:1;padding:3px 6px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);white-space:nowrap}
