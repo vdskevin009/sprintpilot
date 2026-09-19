@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using SprintPilot.Application;
@@ -10,19 +11,20 @@ public partial class Home {
  PlanningPage? planner;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
- bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,orderReview;
- string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="";
+ bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,orderReview,smartOrdering,meetingCreating;
+ string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";
+ string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
  int sprintIndex,selectionAnchor=-1,templateIndex;
  string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
  int promptItemCount;
- string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="",blockedTagsText="",holidayCalendarUrlsText="",holidayCalendarError="";
+ string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="",blockedTagsText="",holidayCalendarError="";
  string newType="",newTitle="",newDescription="",newAcceptance="",newArea="",newTags="",newIteration="";int? newParent;
  readonly string[] AllColumns=["Order","ID","Type","Title","Owner","State","Iteration","Area","Estimate","Priority","Parent","Tags","Changed"];
  readonly string[] QuickViews=["My Work","Team","Unassigned","Carry-over","Bugs","Recently Changed"];
  readonly string[] Commands=["Next sprint","Previous sprint","Show my work","Show unassigned","Select all visible","Clear selection","Move selected to next sprint","Move selected to previous sprint","Assign selected","Add tag","Remove tag","Change state","New PBI","Refresh"];
  List<WorkItem> items=[],previousItems=[],related=[],tagHistory=[],planningItems=[],dailyLookupResults=[];SprintCapacity sprintCapacity=new([],[]);readonly Dictionary<string,List<WorkItem>> sprintCache=new();readonly Dictionary<string,SprintCapacity> capacityByIteration=new(StringComparer.OrdinalIgnoreCase);
- WorkItem? dailyPanelItem;List<WorkItemComment> dailyComments=[];readonly List<string> dailyActivity=[];List<CalendarHoliday> calendarHolidays=[];
+ WorkItem? dailyPanelItem;List<WorkItemComment> dailyComments=[];List<CalendarHoliday> calendarHolidays=[];List<SmartOrderRow> smartOrderPlan=[];MeetingImport meetingImport=new();List<MeetingActionDraft> meetingActions=[];
  readonly HashSet<string> ownerFilters=new(StringComparer.OrdinalIgnoreCase);int? draggedId;
  readonly HashSet<string> cleanupTagFilters=new(StringComparer.OrdinalIgnoreCase);
  readonly HashSet<int> selected=[],busy=[];readonly Dictionary<int,ItemUpdate> drafts=new();
@@ -30,6 +32,7 @@ public partial class Home {
  CancellationTokenSource refreshToken=new();readonly CancellationTokenSource lifetime=new();DotNetObjectReference<Home>? reference;
  string PlanningProfileKey => Tracker.Demo ? "demo" : $"{connection?.Organization}|{connection?.Project}|{connection?.Team}";
  Iteration? CurrentSprint=>meta?.Iterations.ElementAtOrDefault(sprintIndex);
+ Iteration? NextSprint=>meta?.Iterations.ElementAtOrDefault(sprintIndex+1);
  string Adjacent(int delta)=>meta?.Iterations.ElementAtOrDefault(sprintIndex+delta)?.Name??"No sprint";
  string DateRange=>CurrentSprint?.Start is {} start?$"{start:MMM d} – {CurrentSprint.Finish:MMM d, yyyy}":"Dates not configured";
  IEnumerable<WorkItem> AllLoaded=>items.Concat(previousItems).Concat(related).DistinctBy(w=>w.Id);
