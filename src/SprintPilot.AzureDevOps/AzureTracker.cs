@@ -82,14 +82,26 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
  }
  public async Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){
   var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);
-  if(meta.Scope.Length==0)throw new TrackerException("The selected team has no configured area paths.");
-  var scopes=string.Join(" OR ",meta.Scope.Select(a=>$"[System.AreaPath] {(a.IncludeChildren?"UNDER":"=")} '{WiqlLiteral(a.Path)}'"));
-  var orderField=meta.Types.Select(t=>t.OrderField).FirstOrDefault(f=>!string.IsNullOrWhiteSpace(f));
-  var orderBy=orderField is null?"[System.Id]":$"[{orderField}], [System.Id]";
-  var n=await Send(c,"_apis/wit/wiql",HttpMethod.Post,new{query=$"SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.IterationPath] = '{WiqlLiteral(iteration)}' AND ({scopes}) ORDER BY {orderBy}"},ct:ct);
-  var ids=((JsonArray?)n["workItems"]??[]).Select(x=>x!["id"]!.GetValue<int>()).ToArray();var items=new List<WorkItem>();
-  foreach(var chunk in ids.Chunk(200)){var batch=await Send(c,"_apis/wit/workitemsbatch",HttpMethod.Post,new Dictionary<string,object>{["ids"]=chunk,["$expand"]="All",["errorPolicy"]="Fail"},ct:ct);items.AddRange(Values(batch).Select(Map));}
-  return items.OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToArray();
+  var team=meta.Teams.FirstOrDefault(t=>t.Id==c.Connection.Team||t.Name==c.Connection.Team)??meta.Teams.First();
+  var sprint=meta.Iterations.FirstOrDefault(i=>i.Path.Equals(iteration,StringComparison.OrdinalIgnoreCase));
+  if(sprint is null)throw new TrackerException("The selected sprint is not configured for this team.");
+  var response=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(sprint.Id)}/workitems",HttpMethod.Get,ct:ct);
+  var ids=((JsonArray?)response["workItemRelations"]??[])
+    .Select(r=>r?["target"]?["id"]?.GetValue<int>()??0).Where(id=>id>0).Distinct().ToArray();
+  var items=new List<WorkItem>();
+  foreach(var chunk in ids.Chunk(200)){
+   var batch=await Send(c,"_apis/wit/workitemsbatch",HttpMethod.Post,new Dictionary<string,object>{["ids"]=chunk,["$expand"]="All",["errorPolicy"]="Fail"},ct:ct);
+   var values=Values(batch);if(values.Count!=chunk.Length)throw new TrackerException("Some sprint items could not be read. Refresh and try again.");
+   items.AddRange(values.Select(Map));
+  }
+  var byId=items.ToDictionary(w=>w.Id);
+  return ids.Where(byId.ContainsKey).Select((id,index)=>byId[id] with{Order=index+1}).ToArray();
+ }
+ public async Task ReorderSprintAsync(string iterationId,string iterationPath,int id,int previousId,int nextId,CancellationToken ct=default){
+  var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);
+  var team=meta.Teams.FirstOrDefault(t=>t.Id==c.Connection.Team||t.Name==c.Connection.Team)??meta.Teams.First();
+  await Send(c,$"{E(team.Id)}/_apis/work/iterations/{E(iterationId)}/workitemsorder?api-version=7.1",HttpMethod.Patch,
+    new{parentId=0,previousId,nextId,ids=new[]{id},iterationPath},ct:ct,apiVersion:false);
  }
 
  public async Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default)
