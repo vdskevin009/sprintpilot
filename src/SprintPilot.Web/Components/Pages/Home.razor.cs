@@ -247,6 +247,9 @@ public partial class Home {
  List<HomeGroup> Remaining(TagDimension dimension){var configured=PlanningPrefs.Tags.Where(t=>dimension==TagDimension.Application?t.Application:t.Initiative).Select(t=>t.Tag).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();return configured.Select(tag=>{var rows=OpenPlanningItems.Where(w=>w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)).ToArray();return new HomeGroup(tag,rows.Length,rows.Sum(w=>Planning.Estimate(w,PlanningPrefs)??0));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Count).ThenBy(x=>x.Name).ToList();}
  List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":effort>capacity?"Over capacity":missing>0?"Estimates missing":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
  string CapacityLoadText(CapacityRow row){if(!PlanningPrefs.EstimatesAreHours)return "Hour comparison off";if(row.CapacityHours<=0)return row.Effort>0?$"{row.Percent}% · no capacity":"0%";var delta=row.Effort-row.CapacityHours;var unknown=row.MissingEstimates>0?" + unknown":"";return delta>0?$"{row.Percent}% · +{delta:0.#}h{unknown}":$"{row.Percent}% · {Math.Max(0,-delta):0.#}h left{unknown}";}
+ int CapacityFillPercent(CapacityRow row)=>Math.Clamp(row.Percent,0,100);
+ int CapacityOveragePercent(CapacityRow row)=>Math.Clamp(row.Percent-100,0,100);
+ string CapacityMeterTitle(CapacityRow row)=>row.Percent>100?$"{row.Percent}% of capacity · {row.Percent-100}% over":$"{row.Percent}% of capacity";
  InitiativeMetadata Initiative(string tag){var key=prefs.InitiativeMetadata.Keys.FirstOrDefault(k=>k.Equals(tag,StringComparison.OrdinalIgnoreCase));if(key is not null)return prefs.InitiativeMetadata[key];var value=new InitiativeMetadata();prefs.InitiativeMetadata[tag]=value;return value;}
  List<InitiativeRow> InitiativeRows(){var today=DateOnly.FromDateTime(DateTime.Now);return Remaining(TagDimension.Initiative).Select(g=>{var m=Initiative(g.Name);var attention=m.Status is "At Risk" or "Blocked"||m.Confidence=="Low"||(m.DueDate is {} due&&due<=today.AddDays(14));return new InitiativeRow(g.Name,g.Count,g.Effort,m,attention);}).OrderByDescending(x=>x.NeedsAttention).ThenBy(x=>x.Meta.DueDate??DateOnly.MaxValue).ThenBy(x=>x.Tag).ToList();}
  IEnumerable<(string Id,string Name,int Count)> FilterPeople=>items.GroupBy(w=>w.OwnerId).Select(g=>(Id:g.Key,Name:PersonName(g.Key),Count:g.Count())).Where(x=>filterOptionSearch==""||x.Name.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Name=="Unassigned").ThenBy(x=>x.Name);
@@ -405,20 +408,20 @@ __MEETING_NOTES__
   }catch(Exception e){Error(e);}
  }
  string SmartFixNeeds(SmartFixGap gap)=>string.Join(", ",new[]{gap.MissingApplication?"application tag":"",gap.MissingEstimate?"estimate":"",gap.MissingTags?"tags":""}.Where(x=>x!=""));
- static string ClipSmartFixText(string value,int max=700){var text=ContentText.Plain(value??"").Trim();return text.Length<=max?text:text[..max]+"…";}
+ static string ClipSmartFixText(string value,int max=1600){var text=ContentText.Plain(value??"").Trim();return text.Length<=max?text:text[..max]+"…";}
  string BuildSmartFixPrompt(){
   var applications=string.Join(", ",ApplicationTags());
   var initiatives=string.Join(", ",InitiativeTags());
   var known=string.Join(", ",KnownPlanningTags.Take(80));
-  var details=string.Join("\n\n",smartFixGaps.Select(g=>$"# {g.Item.Id}\nTitle: {g.Item.Title}\nType: {g.Item.Type}\nNeeds: {SmartFixNeeds(g)}\nCurrent estimate: {(g.Item.Estimate?.ToString("0.##",CultureInfo.InvariantCulture)??"(missing)")}\nExisting tags: {(g.Item.Tags.Length==0?"(none)":string.Join("; ",g.Item.Tags))}\nDescription: {ClipSmartFixText(g.Item.Description)}\nAcceptance criteria: {ClipSmartFixText(g.Item.Acceptance,450)}"));
+  var details=string.Join("\n\n",smartFixGaps.Select(g=>$"# {g.Item.Id}\nTitle: {g.Item.Title}\nType: {g.Item.Type}\nArea: {g.Item.Area}\nNeeds: {SmartFixNeeds(g)}\nCurrent estimate: {(g.Item.Estimate?.ToString("0.##",CultureInfo.InvariantCulture)??"(missing)")}\nExisting tags: {(g.Item.Tags.Length==0?"(none)":string.Join("; ",g.Item.Tags))}\nDescription: {ClipSmartFixText(g.Item.Description,1600)}\nAcceptance criteria / testing context: {ClipSmartFixText(g.Item.Acceptance,1000)}"));
   return """
 You are helping clean up selected Azure DevOps work items for SprintPilot.
-Use only the work-item information and the known tags below. Do not invent business scope, tags, or estimates.
+Use only the work-item information and the known tags below. Do not invent business scope or tags. For estimates, make a reasonable best-effort estimate from the title, description, acceptance criteria, work-item type, area and existing tags.
 The initiative tag is OPTIONAL. Never add an initiative merely because an item does not have one.
 Only propose values for fields listed in "Needs". Do not replace or remove existing tags.
 For applicationTag, use one of the configured application tags or null if you cannot determine it.
 For addTags, use only tags from Known Azure DevOps tags. Return only tags that should be ADDED.
-For estimate, use a positive number only when an estimate is missing and the work-item content gives enough evidence; otherwise return null.
+For estimate, when an estimate is missing you MUST return a positive number. Derive the best estimate you can from the available context. If the detail is still insufficient to derive a confident estimate, use exactly 3 hours as the default. Never return null for an item whose Needs includes estimate.
 Return raw JSON only, without Markdown fences.
 
 Configured application tags: __APPLICATION_TAGS__
@@ -456,13 +459,15 @@ __WORK_ITEMS__
     var application=(input.ApplicationTag??"").Trim();
     if(!gap.MissingApplication)application="";
     else if(application!=""&&!applicationTags.Contains(application))throw new TrackerException($"#{input.Id}: application tag '{application}' is not one of the configured application tags.");
-    var estimate=input.Estimate;
+    var estimate=input.Estimate;var defaultedEstimate=false;
     if(estimate is {} estimateValue&&(!double.IsFinite(estimateValue)||estimateValue<=0))throw new TrackerException($"#{input.Id}: estimate must be a positive number or null.");
     if(!gap.MissingEstimate)estimate=null;
+    else if(estimate is null){estimate=3d;defaultedEstimate=true;}
     var addTags=(input.AddTags??[]).Where(t=>!string.IsNullOrWhiteSpace(t)).Select(t=>t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     foreach(var tag in addTags)if(!allowedTags.Contains(tag))throw new TrackerException($"#{input.Id}: tag '{tag}' is not a known Azure DevOps tag.");
     addTags=addTags.Where(t=>!gap.Item.Tags.Contains(t,StringComparer.OrdinalIgnoreCase)&&!t.Equals(application,StringComparison.OrdinalIgnoreCase)).ToArray();
-    var suggestion=new SmartFixSuggestion{Id=input.Id,ApplicationTag=application,Estimate=estimate,AddTags=addTags,Reason=(input.Reason??"").Trim(),ApplyApplication=application!="",ApplyEstimate=estimate is not null,ApplyTags=addTags.Length>0};
+    var reason=(input.Reason??"").Trim();if(defaultedEstimate)reason=reason==""?"Estimate defaulted to 3h because Copilot returned no estimate.":reason+" · Estimate defaulted to 3h.";
+    var suggestion=new SmartFixSuggestion{Id=input.Id,ApplicationTag=application,Estimate=estimate,AddTags=addTags,Reason=reason,ApplyApplication=application!="",ApplyEstimate=estimate is not null,ApplyTags=addTags.Length>0};
     if(suggestion.ApplyApplication||suggestion.ApplyEstimate||suggestion.ApplyTags)suggestions.Add(suggestion);
    }
    smartFixSuggestions=suggestions;if(smartFixSuggestions.Count==0)throw new TrackerException("Copilot did not return any applicable Smart Fix suggestions.");
