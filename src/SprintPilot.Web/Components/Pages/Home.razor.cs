@@ -161,6 +161,49 @@ public partial class Home {
  void OpenAttention(string key){ClearFilters();attentionFilter=key;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
  void OpenPerson(string id){ClearFilters();ownerFilters.Add(id);screen="daily";workspaceMode="People";detail=null;dailyPanelItem=null;}
  void OpenGroup(string tag){ClearFilters();tagFilter=tag;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
+ string DefaultMeetingType()=>meta?.Types.FirstOrDefault(t=>t.Name is "Product Backlog Item" or "User Story")?.Name??meta?.Types.FirstOrDefault()?.Name??"";
+ void EnsureMeetingDefaults(){if(meetingWorkType=="")meetingWorkType=DefaultMeetingType();if(meetingTitle=="")meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";}
+ void ResetMeeting(){meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";meetingNotes=meetingCopilotText=meetingError="";meetingImport=new();meetingActions=[];meetingWorkType=DefaultMeetingType();}
+ async Task CopyMeetingPrompt(){EnsureMeetingDefaults();if(string.IsNullOrWhiteSpace(meetingNotes)){meetingError="Add meeting notes first.";return;}meetingError="";var knownTags=string.Join(", ",KnownPlanningTags.Take(40));var prompt=$"""You are helping structure business meeting notes for SprintPilot. Use only information present in the notes. Do not invent commitments, owners, estimates, acceptance criteria, or technical details. Return raw JSON only.
+
+Current sprint: {CurrentSprint?.Name??"not available"}
+Next sprint: {NextSprint?.Name??"not available"}
+Known Azure DevOps tags: {knownTags}
+
+Required JSON shape:
+{{
+  "summary": ["short factual summary point"],
+  "decisions": ["decision explicitly made in the meeting"],
+  "actions": [
+    {{
+      "title": "clear backlog item title",
+      "description": "concise context and requested outcome",
+      "acceptanceCriteria": "only if supported by the notes; otherwise empty",
+      "owner": "me or unassigned",
+      "sprint": "current or next",
+      "suggestedEstimate": null,
+      "tags": ["existing relevant tag"]
+    }}
+  ]
+}}
+
+Rules:
+- New and To Do are simply active work; do not invent workflow states.
+- Use owner "me" only when the notes clearly assign the action to me. Otherwise use "unassigned".
+- suggestedEstimate is optional and must be null when the notes do not support a reasonable suggestion.
+- Prefer known tags and do not invent unnecessary tags.
+- Keep actions small enough to become individual backlog items.
+- Exclude discussion points that do not require action.
+
+Meeting title: {meetingTitle}
+
+MEETING NOTES:
+{meetingNotes}
+""";await JS.InvokeVoidAsync("sprintPilot.copy",prompt);Notify("Copilot meeting prompt copied.");}
+ static string StripCodeFence(string text){var value=text.Trim();var fence=new string((char)96,3);if(!value.StartsWith(fence))return value;var first=value.IndexOf('\n');if(first>=0)value=value[(first+1)..];if(value.EndsWith(fence))value=value[..^3];return value.Trim();}
+ void ParseMeetingCopilot(){meetingError="";try{var parsed=JsonSerializer.Deserialize<MeetingImport>(StripCodeFence(meetingCopilotText),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})??throw new JsonException();meetingImport=parsed;meetingActions=parsed.Actions.Where(a=>!string.IsNullOrWhiteSpace(a.Title)).Select(a=>new MeetingActionDraft{Title=a.Title.Trim(),Description=a.Description??"",AcceptanceCriteria=a.AcceptanceCriteria??"",Owner=a.Owner.Equals("me",StringComparison.OrdinalIgnoreCase)?meta?.Me.UniqueName??"":meta?.People.FirstOrDefault(p=>p.Name.Equals(a.Owner,StringComparison.OrdinalIgnoreCase)||p.UniqueName.Equals(a.Owner,StringComparison.OrdinalIgnoreCase))?.UniqueName??"",Sprint=a.Sprint.Equals("next",StringComparison.OrdinalIgnoreCase)?"next":"current",SuggestedEstimate=a.SuggestedEstimate,TagsText=string.Join("; ",a.Tags??[])}).ToList();if(meetingActions.Count==0&&parsed.Summary.Length==0&&parsed.Decisions.Length==0)meetingError="No structured meeting content was found.";}catch{meetingError="The Copilot response is not valid SprintPilot JSON. Copy the generated prompt again and paste Copilot's raw JSON response here.";}}
+ async Task CopyMeetingSummary(){var lines=new List<string>{meetingTitle};if(meetingImport.Summary.Length>0){lines.Add("");lines.Add("Summary");lines.AddRange(meetingImport.Summary.Select(x=>"• "+x));}if(meetingImport.Decisions.Length>0){lines.Add("");lines.Add("Decisions");lines.AddRange(meetingImport.Decisions.Select(x=>"• "+x));}var created=meetingActions.Where(a=>a.CreatedId is not null).ToArray();if(created.Length>0){lines.Add("");lines.Add("Created backlog items");lines.AddRange(created.Select(a=>$"• #{a.CreatedId} {a.Title}"));}await JS.InvokeVoidAsync("sprintPilot.copy",string.Join(Environment.NewLine,lines));Notify("Meeting summary copied.");}
+ async Task CreateMeetingActions(){if(meetingCreating||meta is null)return;meetingCreating=true;meetingError="";try{var type=meetingWorkType==""?DefaultMeetingType():meetingWorkType;var definition=meta.Types.FirstOrDefault(t=>t.Name==type)??throw new TrackerException("Choose a valid work-item type.");var area=meta.Scope.FirstOrDefault()?.Path??meta.Areas.FirstOrDefault()??"";var selectedActions=meetingActions.Where(a=>a.Selected&&a.CreatedId is null).ToArray();if(selectedActions.Length==0){meetingError="Select at least one action to create.";return;}foreach(var action in selectedActions){if(string.IsNullOrWhiteSpace(action.Title)){meetingError="Every selected action needs a title.";return;}var iteration=action.Sprint=="next"?NextSprint?.Path:CurrentSprint?.Path;if(string.IsNullOrWhiteSpace(iteration)){meetingError=action.Sprint=="next"?"No next sprint is configured.":"No current sprint is configured.";return;}var title=action.Title.Trim();if(title.Length>255)title=title[..255];var changes=new List<Change>{new(ItemField.Title,title),new(ItemField.Description,ContentText.HtmlEncode(action.Description??"")),new(ItemField.Area,area),new(ItemField.Iteration,iteration),new(ItemField.Tags,action.TagsText??"")};if(action.Owner!="")changes.Add(new(ItemField.Owner,action.Owner));if(action.SuggestedEstimate is {} estimate&&estimate>=0&&definition.EstimateField is not null)changes.Add(new(ItemField.Estimate,estimate));if(!string.IsNullOrWhiteSpace(action.AcceptanceCriteria)){if(definition.Fields.Contains("Microsoft.VSTS.Common.AcceptanceCriteria"))changes.Add(new(ItemField.Acceptance,ContentText.HtmlEncode(action.AcceptanceCriteria)));else{var description=(action.Description??"")+"\n\nACCEPTANCE CRITERIA:\n"+action.AcceptanceCriteria;changes.RemoveAll(c=>c.Field==ItemField.Description);changes.Add(new(ItemField.Description,ContentText.HtmlEncode(description)));}}var created=await Tracker.CreateAsync(type,changes,null,lifetime.Token);action.CreatedId=created.Id;action.CreatedUrl=created.Url;if(created.Iteration==CurrentSprint?.Path)items.Add(created);sprintCache.Clear();}Notify($"{selectedActions.Length} backlog item(s) created from the meeting.");}catch(Exception e){meetingError=e is TrackerException?e.Message:"The backlog items could not be created. Check the Azure DevOps connection and try again.";}finally{meetingCreating=false;}}
  void AddClassification(){var tag=classificationTag.Trim();if(tag=="")return;if(!PlanningPrefs.Tags.Any(t=>t.Tag.Equals(tag,StringComparison.OrdinalIgnoreCase)))PlanningPrefs.Tags.Add(new(tag,false,false));classificationTag="";}
  void SetClassification(string tag,bool application,bool enabled){var i=PlanningPrefs.Tags.FindIndex(t=>t.Tag.Equals(tag,StringComparison.OrdinalIgnoreCase));if(i<0)return;var old=PlanningPrefs.Tags[i];PlanningPrefs.Tags[i]=application?old with{Application=enabled}:old with{Initiative=enabled};}
  void RemoveClassification(string tag){PlanningPrefs.Tags.RemoveAll(t=>t.Tag.Equals(tag,StringComparison.OrdinalIgnoreCase));prefs.InitiativeMetadata.Remove(tag);}
@@ -194,7 +237,7 @@ public partial class Home {
  async Task DropOn(WorkItem target){if(draggedId is not {} sourceId||sourceId==target.Id)return;var ordered=items.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();var source=ordered.FirstOrDefault(w=>w.Id==sourceId);if(source is null||!CanOrder(target)){draggedId=null;return;}ordered.Remove(source);var targetIndex=ordered.IndexOf(target);if(targetIndex<0){draggedId=null;return;}ordered.Insert(targetIndex,source);draggedId=null;for(var i=0;i<ordered.Count;i++){var desired=(i+1)*1000d;if(ordered[i].Order!=desired)await InlineEdit((ordered[i],ItemField.Order,desired.ToString(CultureInfo.InvariantCulture)));}}
  void DailyDragStart(WorkItem w){if(CanOrder(w))draggedId=w.Id;}
  async Task DailyDropOn(WorkItem target){if(draggedId is not {} id||id==target.Id)return;var source=items.FirstOrDefault(w=>w.Id==id);if(source is null){draggedId=null;return;}if(source.OwnerId!=target.OwnerId){draggedId=null;Notify("Reorder within the same person. Reassign the item first to move it to another person.");return;}if(WorkGroupRank(source)!=WorkGroupRank(target)){draggedId=null;Notify("Done, blocked and active work stay in separate groups. Reorder within the same group.");return;}await DropOn(target);}
- void SetScreen(string target){screen=target;detail=null;dailyPanelItem=null;if(target=="daily"){workspaceMode="People";quickView="Team";attentionFilter="";orderReview=false;}else if(target=="workspace"){workspaceMode="List";sort="Order";descending=false;}else if(target=="cleanup")workspaceMode="List";if(target!="workspace")orderReview=false;}
+ void SetScreen(string target){screen=target;detail=null;dailyPanelItem=null;if(target=="daily"){workspaceMode="People";quickView="Team";attentionFilter="";orderReview=false;}else if(target=="workspace"){workspaceMode="List";sort="Order";descending=false;}else if(target=="cleanup")workspaceMode="List";else if(target=="meeting")EnsureMeetingDefaults();if(target!="workspace")orderReview=false;}
  void ToggleOrderReview(){orderReview=!orderReview;if(orderReview){ClearFilters();screen="workspace";workspaceMode="List";sort="Order";descending=false;selected.Clear();}}
  List<SmartOrderRow> BuildSmartOrderPlan(){var ordered=items.Where(CanOrder).OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();var owners=ordered.Select(w=>w.OwnerId).Distinct().OrderBy(id=>id==""?1:0).ThenBy(id=>ordered.FindIndex(w=>w.OwnerId==id)).ToArray();var result=new List<SmartOrderRow>();foreach(var owner in owners){foreach(var w in ordered.Where(w=>w.OwnerId==owner).OrderBy(WorkGroupRank).ThenBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id))result.Add(new(result.Count+1,w,PersonName(owner),WorkGroupName(w)));}return result;}
  void PrepareSmartOrder(){smartOrderPlan=BuildSmartOrderPlan();if(smartOrderPlan.Count==0){Notify("No orderable work items were found in this sprint.");return;}dialog="smartorder";dialogError="";focusDialog=true;}
