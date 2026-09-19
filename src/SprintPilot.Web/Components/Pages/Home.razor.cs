@@ -95,8 +95,8 @@ public partial class Home {
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> UpcomingDaysOff(){if(meta is null)return [];var today=DateTimeOffset.Now.Date;var rows=new List<(string,string,DateRange)>();foreach(var p in meta.People){foreach(var r in DaysOff(p.Id).Where(r=>r.End.Date>=today))rows.Add((p.Id,p.Name,r));}return rows.Distinct().OrderBy(x=>x.Item3.Start).ToList();}
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> HomeDaysOff(){var rows=UpcomingDaysOff().GroupBy(x=>x.PersonId).Select(g=>g.OrderBy(x=>x.Range.Start).First());return rows.OrderBy(x=>x.PersonId==meta?.Me.Id?0:1).ThenBy(x=>x.Range.Start).ToList();}
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> VisibleDaysOff(){var rows=UpcomingDaysOff();return showAllDaysOff?rows:rows.Take(1).ToList();}
- sealed record HolidayCountry(string Code,string Name);
- static readonly HolidayCountry[] HolidayCountries=[new("BE","Belgium"),new("CA","Canada"),new("PL","Poland"),new("CZ","Czechia")];
+ sealed record HolidayCountry(string Code,string Name,string? Subdivision=null);
+ static readonly HolidayCountry[] HolidayCountries=[new("BE","Belgium"),new("CA","Canada · Quebec","CA-QC"),new("PL","Poland"),new("CZ","Czechia"),new("DE","Germany")];
  sealed record CalendarHoliday(string Name,DateOnly Start,DateOnly End,string CountryCode,string Country);
  async Task<List<CalendarHoliday>> LoadCountryHolidays(HolidayCountry country,int year,CancellationToken ct){
   try{
@@ -104,7 +104,11 @@ public partial class Home {
    var json=await Http.GetStringAsync($"https://date.nager.at/api/v3/PublicHolidays/{year}/{country.Code}",requestCts.Token);
    using var doc=JsonDocument.Parse(json);var list=new List<CalendarHoliday>();
    foreach(var h in doc.RootElement.EnumerateArray()){
-    if(h.TryGetProperty("global",out var global)&&global.ValueKind==JsonValueKind.False)continue;
+    var isGlobal=!h.TryGetProperty("global",out var global)||global.ValueKind!=JsonValueKind.False;
+    var appliesToSubdivision=false;
+    if(country.Subdivision is not null&&h.TryGetProperty("counties",out var counties)&&counties.ValueKind==JsonValueKind.Array)
+      appliesToSubdivision=counties.EnumerateArray().Any(c=>string.Equals(c.GetString(),country.Subdivision,StringComparison.OrdinalIgnoreCase));
+    if(!isGlobal&&!appliesToSubdivision)continue;
     if(!h.TryGetProperty("date",out var dateNode)||!DateOnly.TryParse(dateNode.GetString(),out var day))continue;
     var name=h.TryGetProperty("localName",out var local)&&!string.IsNullOrWhiteSpace(local.GetString())?local.GetString()!:h.TryGetProperty("name",out var english)?english.GetString()??"Holiday":"Holiday";
     list.Add(new(name,day,day,country.Code,country.Name));
