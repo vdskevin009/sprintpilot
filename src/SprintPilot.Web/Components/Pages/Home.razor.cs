@@ -165,18 +165,19 @@ public partial class Home {
  string DefaultMeetingType()=>meta?.Types.FirstOrDefault(t=>t.Name is "Product Backlog Item" or "User Story")?.Name??meta?.Types.FirstOrDefault()?.Name??"";
  void EnsureMeetingDefaults(){if(meetingWorkType=="")meetingWorkType=DefaultMeetingType();if(meetingTitle=="")meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";}
  void ResetMeeting(){meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";meetingNotes=meetingCopilotText=meetingError="";meetingImport=new();meetingActions=[];meetingWorkType=DefaultMeetingType();}
- async Task CopyMeetingPrompt(){EnsureMeetingDefaults();if(string.IsNullOrWhiteSpace(meetingNotes)){meetingError="Add meeting notes first.";return;}meetingError="";var knownTags=string.Join(", ",KnownPlanningTags.Take(40));var prompt=$"""You are helping structure business meeting notes for SprintPilot. Use only information present in the notes. Do not invent commitments, owners, estimates, acceptance criteria, or technical details. Return raw JSON only.
+ async Task CopyMeetingPrompt(){EnsureMeetingDefaults();if(string.IsNullOrWhiteSpace(meetingNotes)){meetingError="Add meeting notes first.";return;}meetingError="";var knownTags=string.Join(", ",KnownPlanningTags.Take(40));var prompt="""
+You are helping structure business meeting notes for SprintPilot. Use only information present in the notes. Do not invent commitments, owners, estimates, acceptance criteria, or technical details. Return raw JSON only.
 
-Current sprint: {CurrentSprint?.Name??"not available"}
-Next sprint: {NextSprint?.Name??"not available"}
-Known Azure DevOps tags: {knownTags}
+Current sprint: __CURRENT_SPRINT__
+Next sprint: __NEXT_SPRINT__
+Known Azure DevOps tags: __KNOWN_TAGS__
 
 Required JSON shape:
-{{
+{
   "summary": ["short factual summary point"],
   "decisions": ["decision explicitly made in the meeting"],
   "actions": [
-    {{
+    {
       "title": "clear backlog item title",
       "description": "concise context and requested outcome",
       "acceptanceCriteria": "only if supported by the notes; otherwise empty",
@@ -184,9 +185,9 @@ Required JSON shape:
       "sprint": "current or next",
       "suggestedEstimate": null,
       "tags": ["existing relevant tag"]
-    }}
+    }
   ]
-}}
+}
 
 Rules:
 - New and To Do are simply active work; do not invent workflow states.
@@ -196,11 +197,11 @@ Rules:
 - Keep actions small enough to become individual backlog items.
 - Exclude discussion points that do not require action.
 
-Meeting title: {meetingTitle}
+Meeting title: __MEETING_TITLE__
 
 MEETING NOTES:
-{meetingNotes}
-""";await JS.InvokeVoidAsync("sprintPilot.copy",prompt);Notify("Copilot meeting prompt copied.");}
+__MEETING_NOTES__
+""".Replace("__CURRENT_SPRINT__",CurrentSprint?.Name??"not available").Replace("__NEXT_SPRINT__",NextSprint?.Name??"not available").Replace("__KNOWN_TAGS__",knownTags).Replace("__MEETING_TITLE__",meetingTitle).Replace("__MEETING_NOTES__",meetingNotes);await JS.InvokeVoidAsync("sprintPilot.copy",prompt);Notify("Copilot meeting prompt copied.");}
  static string StripCodeFence(string text){var value=text.Trim();var fence=new string((char)96,3);if(!value.StartsWith(fence))return value;var first=value.IndexOf('\n');if(first>=0)value=value[(first+1)..];if(value.EndsWith(fence))value=value[..^3];return value.Trim();}
  void ParseMeetingCopilot(){meetingError="";try{var parsed=JsonSerializer.Deserialize<MeetingImport>(StripCodeFence(meetingCopilotText),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})??throw new JsonException();meetingImport=parsed;meetingActions=parsed.Actions.Where(a=>!string.IsNullOrWhiteSpace(a.Title)).Select(a=>new MeetingActionDraft{Title=a.Title.Trim(),Description=a.Description??"",AcceptanceCriteria=a.AcceptanceCriteria??"",Owner=a.Owner.Equals("me",StringComparison.OrdinalIgnoreCase)?meta?.Me.UniqueName??"":meta?.People.FirstOrDefault(p=>p.Name.Equals(a.Owner,StringComparison.OrdinalIgnoreCase)||p.UniqueName.Equals(a.Owner,StringComparison.OrdinalIgnoreCase))?.UniqueName??"",Sprint=a.Sprint.Equals("next",StringComparison.OrdinalIgnoreCase)?"next":"current",SuggestedEstimate=a.SuggestedEstimate,TagsText=string.Join("; ",a.Tags??[])}).ToList();if(meetingActions.Count==0&&parsed.Summary.Length==0&&parsed.Decisions.Length==0)meetingError="No structured meeting content was found.";}catch{meetingError="The Copilot response is not valid SprintPilot JSON. Copy the generated prompt again and paste Copilot's raw JSON response here.";}}
  async Task CopyMeetingSummary(){var lines=new List<string>{meetingTitle};if(meetingImport.Summary.Length>0){lines.Add("");lines.Add("Summary");lines.AddRange(meetingImport.Summary.Select(x=>"• "+x));}if(meetingImport.Decisions.Length>0){lines.Add("");lines.Add("Decisions");lines.AddRange(meetingImport.Decisions.Select(x=>"• "+x));}var created=meetingActions.Where(a=>a.CreatedId is not null).ToArray();if(created.Length>0){lines.Add("");lines.Add("Created backlog items");lines.AddRange(created.Select(a=>$"• #{a.CreatedId} {a.Title}"));}await JS.InvokeVoidAsync("sprintPilot.copy",string.Join(Environment.NewLine,lines));Notify("Meeting summary copied.");}
