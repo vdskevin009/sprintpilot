@@ -7,7 +7,7 @@
 @inject IJSRuntime JS
 
 <div class="app-shell">
-<aside class="rail"><a class="brand" href="/" aria-label="SprintPilot home"><img src="icon.svg" alt=""/>SprintPilot</a>
+<aside class="rail"><a class="brand" href="/" aria-label="SprintPilot home"><img src="icon.svg" alt=""/><span><strong>SprintPilot</strong><small>KV Solutions</small></span></a>
 <div class="workspace-label">Orchestration</div>
 <button class="nav-button @(screen=="home"?"active":"")" disabled="@(meta is null)" @onclick='()=>SetScreen("home")'>⌂ Home</button>
 <button class="nav-button @(screen=="daily"?"active":"")" disabled="@(meta is null)" @onclick='()=>SetScreen("daily")'>◉ Daily</button>
@@ -19,7 +19,7 @@
 @foreach(var view in prefs.Views){<button class="nav-button" @onclick="()=>LoadView(view)">⌑ @view.Name</button>}
 <div class="rail-bottom"><button class="nav-button" @onclick='()=>SetScreen("settings")'>⚙ Settings</button><button class="nav-button" title="Command palette (Ctrl+K)" @onclick='()=>Show("palette")'>⌘ Commands <kbd>Ctrl K</kbd></button><div class="connection-dot">● @(Tracker.Demo?"Demo workspace":meta is null?"Not connected":"Azure DevOps connected")</div></div></aside>
 <main>
-<header class="topbar"><span>@(Tracker.Demo?"Demo / Platform team":connection is null?"Local workspace":connection.Organization+" / "+connection.Project)</span><span class="muted">@meta?.Me.Name</span></header>
+<header class="topbar"><span class="topbar-context">@(Tracker.Demo?"Demo / Platform team":connection is null?"Local workspace":connection.Organization+" / "+connection.Project)</span><span class="topbar-product">KV Solutions <i>·</i> SprintPilot</span><span class="muted">@meta?.Me.Name</span></header>
 @if(Tracker.Demo){<div class="demo-banner">Demo mode — changes stay in this browser session. <button @onclick="ExitDemo">Connect Azure DevOps</button></div>}
 @if(message!=""){<div class="notice @(hasError?"error":"")" role="status">@message <button aria-label="Dismiss notification" @onclick="()=>message=string.Empty">×</button></div>}
 @if(initializing){<div class="empty"><h1>Opening SprintPilot…</h1></div>}
