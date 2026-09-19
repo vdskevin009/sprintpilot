@@ -9,6 +9,11 @@
 {
     <p class="planning-updated">@AsOf.ToString("ddd, MMM d, yyyy") · refreshed @snapshot.LoadedAt.ToLocalTime().ToString("HH:mm") · @(Tracker.Demo ? "Sample data" : "Azure DevOps")</p>
     <PlanningDashboard Snapshot="snapshot" Settings="settings" Selected="horizon" PeriodChanged="SelectPeriod" ApplicationTags="applicationTags" InitiativeTags="initiativeTags" TagToggled="ToggleTag" TagsCleared="ClearTags" DrillDown="ShowItems" />
+    <section class="planning-tag-manager" aria-label="Tag classifications">
+      <header><div><h2>Applications &amp; initiatives</h2><p>Add Azure DevOps tags and classify each as an application, an initiative, or both.</p></div></header>
+      <div class="toolbar"><input list="planning-overview-known-tags" aria-label="Tag to classify" placeholder="Select or enter a tag" @bind="newTag"/><datalist id="planning-overview-known-tags">@foreach(var tag in allItems.SelectMany(w => w.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order()){<option value="@tag"/>}</datalist><button @onclick="AddOverviewTag">Add tag</button><button @onclick="EditSettings">More planning settings</button></div>
+      @if(settings.Tags.Count>0){<div class="planning-table-wrap"><table><thead><tr><th>Tag</th><th>Application</th><th>Initiative</th></tr></thead><tbody>@foreach(var tag in settings.Tags){<tr><th>@tag.Tag</th><td><input type="checkbox" checked="@tag.Application" @onchange="e=>SetOverviewClassification(tag.Tag,true,e.Value is true)"/></td><td><input type="checkbox" checked="@tag.Initiative" @onchange="e=>SetOverviewClassification(tag.Tag,false,e.Value is true)"/></td></tr>}</tbody></table></div>}
+    </section>
 }
 @if(drillItems is not null)
 {
@@ -99,6 +104,22 @@ var key = PlanningSettings.CapacityKey(person.Id, sprint.Id); var target = draft
     void ToggleType(string name) => draft.Types = draft.Types.Contains(name) ? draft.Types.Where(t => t != name).ToArray() : [..draft.Types, name];
     IEnumerable<string> NumericChoices(TypeDefinition type) => allItems.Where(w => w.Type == type.Name).SelectMany(w => w.NumericFields.Keys).Concat(new[] { type.EstimateField ?? "" }).Where(f => f != "" && type.Fields.Contains(f)).Distinct().Order();
     void SetField(string type, string field) { draft.EstimateFields[type] = field; draft.EstimatesAreHours = false; }
+    async Task AddOverviewTag()
+    {
+        var tag=newTag.Trim();if(tag=="")return;
+        if(!settings.Tags.Any(t=>t.Tag.Equals(tag,StringComparison.OrdinalIgnoreCase)))settings.Tags.Add(new(tag,false,false));
+        newTag="";await SaveOverviewTags();
+    }
+    async Task SetOverviewClassification(string tag,bool application,bool enabled)
+    {
+        var index=settings.Tags.FindIndex(t=>t.Tag.Equals(tag,StringComparison.OrdinalIgnoreCase));if(index<0)return;
+        var old=settings.Tags[index];settings.Tags[index]=application?old with{Application=enabled}:old with{Initiative=enabled};await SaveOverviewTags();
+    }
+    async Task SaveOverviewTags()
+    {
+        Preferences.PlanningProfiles[ProfileKey]=Clone(settings);await Store.SaveAsync(Preferences,lifetime.Token);draft=Clone(settings);
+        if(snapshot is not null)snapshot=Planning.Build(allItems,Meta,settings,AsOf,DateTimeOffset.Now);
+    }
     void AddTag()
     {
         var tag = newTag.Trim(); if(tag == "") return;
