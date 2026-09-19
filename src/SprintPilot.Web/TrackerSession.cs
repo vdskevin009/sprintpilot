@@ -12,6 +12,8 @@ public sealed class TrackerSession(AzureTracker azure,DemoTracker demo):IWorkTra
  public Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default)=>Active.CapacityAsync(iterationId,ct);
  public Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default)=>Active.PlanningAsync(types,ct);
  public Task<WorkItem> GetAsync(int id,CancellationToken ct=default)=>Active.GetAsync(id,ct);
+ public Task<IReadOnlyList<WorkItemComment>> CommentsAsync(int id,CancellationToken ct=default)=>Active.CommentsAsync(id,ct);
+ public Task<WorkItemComment> AddCommentAsync(int id,string text,CancellationToken ct=default)=>Active.AddCommentAsync(id,text,ct);
  public Task<WorkItem> UpdateAsync(ItemUpdate u,CancellationToken ct=default)=>Active.UpdateAsync(u,ct);
  public Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default)=>Active.CreateAsync(type,changes,parent,ct);
 }
