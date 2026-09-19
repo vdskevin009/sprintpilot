@@ -19,8 +19,9 @@ public static class Planning
         if (settings.Types.Length == 0 || settings.Types.Any(t => t.Equals("Task", StringComparison.OrdinalIgnoreCase)))
             throw new TrackerException("Select at least one backlog/bug type. Tasks are excluded from planning.");
         static bool Valid(CapacityTarget t) => double.IsFinite(t.Minimum) && double.IsFinite(t.Maximum) && t.Minimum >= 0 && t.Maximum >= t.Minimum;
-        if (!Valid(settings.DefaultTarget) || settings.CapacityOverrides.Values.Any(t => !Valid(t)))
-            throw new TrackerException("Capacity targets need non-negative hours and a maximum at least as large as the minimum.");
+        if (!Valid(settings.DefaultTarget) || settings.CapacityOverrides.Values.Any(t => !Valid(t)) ||
+            settings.PersonCapacityHours.Values.Any(h => !double.IsFinite(h) || h < 0))
+            throw new TrackerException("Capacity targets need non-negative finite hours and a maximum at least as large as the minimum.");
         if (settings.Tags.Any(t => string.IsNullOrWhiteSpace(t.Tag)))
             throw new TrackerException("Tag names cannot be empty.");
         if (settings.Tags.Select(t => t.Tag.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != settings.Tags.Count)
@@ -61,7 +62,10 @@ public static class Planning
             Period(PlanningHorizon.Backlog, "Backlog", "Unscheduled + overdue sprint work", open.Where(w => !scheduled.Contains(w.Iteration)).ToArray()),
             Period(PlanningHorizon.Total, "Total", "All open team backlog items + bugs", open)
         };
-        CapacityTarget Target(string id, Iteration? iteration) => iteration is null ? settings.DefaultTarget : settings.CapacityOverrides.GetValueOrDefault(PlanningSettings.CapacityKey(id, iteration.Id), settings.DefaultTarget);
+        CapacityTarget PersonDefault(string id) => settings.PersonCapacityHours.TryGetValue(id, out var hours)
+            ? new CapacityTarget(Math.Min(settings.DefaultTarget.Minimum, hours), hours)
+            : settings.DefaultTarget;
+        CapacityTarget Target(string id, Iteration? iteration) => iteration is null ? PersonDefault(id) : settings.CapacityOverrides.GetValueOrDefault(PlanningSettings.CapacityKey(id, iteration.Id), PersonDefault(id));
         PersonPeriod PersonPeriod(string id, PlanningPeriod period, Iteration? iteration)
         {
             var rows = period.Items.Where(w => Identity(w) == id).ToArray();

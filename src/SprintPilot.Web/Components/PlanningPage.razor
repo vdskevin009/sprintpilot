@@ -40,7 +40,9 @@
 <p>Targets are planning ranges, not performance scores. Adjust individual sprints for leave, support or other commitments. Zero is valid for someone unavailable.</p>
 @if(snapshot is not null){<div class="planning-table-wrap"><table><thead><tr><th>Person</th><th>Sprint</th><th>Minimum h</th><th>Maximum h</th><th></th></tr></thead><tbody>
 @foreach(var person in Meta.People){@foreach(var sprint in new[] { snapshot.Current, snapshot.Next }.OfType<Iteration>()){
-var key = PlanningSettings.CapacityKey(person.Id, sprint.Id); var target = draft.CapacityOverrides.GetValueOrDefault(key, draft.DefaultTarget);
+var key = PlanningSettings.CapacityKey(person.Id, sprint.Id);
+var personTarget = draft.PersonCapacityHours.TryGetValue(person.Id, out var personHours) ? new CapacityTarget(Math.Min(draft.DefaultTarget.Minimum, personHours), personHours) : draft.DefaultTarget;
+var target = draft.CapacityOverrides.GetValueOrDefault(key, personTarget);
 <tr><th>@person.Name</th><td>@sprint.Name</td><td><input aria-label="@($"{person.Name} {sprint.Name} minimum")" type="number" min="0" step="0.5" value="@target.Minimum" @onchange="e => SetOverride(key, e, true)"/></td><td><input aria-label="@($"{person.Name} {sprint.Name} maximum")" type="number" min="0" step="0.5" value="@target.Maximum" @onchange="e => SetOverride(key, e, false)"/></td><td><button @onclick="() => draft.CapacityOverrides.Remove(key)">Use default</button></td></tr>
 }}
 </tbody></table></div>}

@@ -13,7 +13,11 @@ public sealed class PlanningSettings
     public bool EstimatesAreHours { get; set; }
     public Dictionary<string, string> EstimateFields { get; set; } = new();
     public CapacityTarget DefaultTarget { get; set; } = new();
-    // Keys are immutable identity ID + iteration ID; absence falls back to the default.
+    // Persistent per-person sprint capacity. When absent, DefaultTarget.Maximum (60h) is used.
+    public Dictionary<string, double> PersonCapacityHours { get; set; } = new();
+    // Public-holiday calendar key per immutable person identity (for example BE, CA, CA-QC, PL, CZ or DE).
+    public Dictionary<string, string> HolidayCalendarByPerson { get; set; } = new();
+    // Keys are immutable identity ID + iteration ID; a sprint-specific override wins over the person's default.
     public Dictionary<string, CapacityTarget> CapacityOverrides { get; set; } = new();
     public static string CapacityKey(string personId, string iterationId) => personId + ":" + iterationId;
 }

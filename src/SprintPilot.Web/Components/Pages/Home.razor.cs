@@ -95,43 +95,87 @@ public partial class Home {
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> UpcomingDaysOff(){if(meta is null)return [];var today=DateTimeOffset.Now.Date;var rows=new List<(string,string,DateRange)>();foreach(var p in meta.People){foreach(var r in DaysOff(p.Id).Where(r=>r.End.Date>=today))rows.Add((p.Id,p.Name,r));}return rows.Distinct().OrderBy(x=>x.Item3.Start).ToList();}
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> HomeDaysOff(){var rows=UpcomingDaysOff().GroupBy(x=>x.PersonId).Select(g=>g.OrderBy(x=>x.Range.Start).First());return rows.OrderBy(x=>x.PersonId==meta?.Me.Id?0:1).ThenBy(x=>x.Range.Start).ToList();}
  IReadOnlyList<(string PersonId,string Name,DateRange Range)> VisibleDaysOff(){var rows=UpcomingDaysOff();return showAllDaysOff?rows:rows.Take(1).ToList();}
- sealed record HolidayCountry(string Code,string Name,string? Subdivision=null);
- static readonly HolidayCountry[] HolidayCountries=[new("BE","Belgium"),new("CA","Canada · Quebec","CA-QC"),new("PL","Poland"),new("CZ","Czechia"),new("DE","Germany")];
+ sealed record HolidayCountry(string Code,string Name,string ApiCode,string? Subdivision=null);
+ static readonly HolidayCountry[] HolidayCountries=[
+  new("BE","Belgium","BE"),
+  new("CA","Canada","CA"),
+  new("CA-QC","Québec","CA","CA-QC"),
+  new("PL","Poland","PL"),
+  new("CZ","Czechia","CZ"),
+  new("DE","Germany","DE")
+ ];
  sealed record CalendarHoliday(string Name,DateOnly Start,DateOnly End,string CountryCode,string Country);
+ bool holidayFallbackUsed;
+ List<CalendarHoliday> BuiltInCountryHolidays(HolidayCountry country,int year)=>PublicHolidays.For(country.Code,year).Select(h=>new CalendarHoliday(h.Name,h.Date,h.Date,country.Code,country.Name)).ToList();
  async Task<List<CalendarHoliday>> LoadCountryHolidays(HolidayCountry country,int year,CancellationToken ct){
   try{
    using var requestCts=CancellationTokenSource.CreateLinkedTokenSource(ct);requestCts.CancelAfter(TimeSpan.FromSeconds(5));
-   var json=await Http.GetStringAsync($"https://date.nager.at/api/v3/PublicHolidays/{year}/{country.Code}",requestCts.Token);
+   var json=await Http.GetStringAsync($"https://date.nager.at/api/v3/PublicHolidays/{year}/{country.ApiCode}",requestCts.Token);
    using var doc=JsonDocument.Parse(json);var list=new List<CalendarHoliday>();
    foreach(var h in doc.RootElement.EnumerateArray()){
     var isGlobal=!h.TryGetProperty("global",out var global)||global.ValueKind!=JsonValueKind.False;
     var appliesToSubdivision=false;
     if(country.Subdivision is not null&&h.TryGetProperty("counties",out var counties)&&counties.ValueKind==JsonValueKind.Array)
       appliesToSubdivision=counties.EnumerateArray().Any(c=>string.Equals(c.GetString(),country.Subdivision,StringComparison.OrdinalIgnoreCase));
-    if(!isGlobal&&!appliesToSubdivision)continue;
+    if(country.Subdivision is null&&!isGlobal)continue;
+    if(country.Subdivision is not null&&!isGlobal&&!appliesToSubdivision)continue;
     if(!h.TryGetProperty("date",out var dateNode)||!DateOnly.TryParse(dateNode.GetString(),out var day))continue;
     var name=h.TryGetProperty("localName",out var local)&&!string.IsNullOrWhiteSpace(local.GetString())?local.GetString()!:h.TryGetProperty("name",out var english)?english.GetString()??"Holiday":"Holiday";
     list.Add(new(name,day,day,country.Code,country.Name));
    }
-   return list;
-  }catch(OperationCanceledException) when(!ct.IsCancellationRequested){return [];}catch(OperationCanceledException){throw;}catch{return [];}
+   if(list.Count>0)return list;
+   holidayFallbackUsed=true;return BuiltInCountryHolidays(country,year);
+  }catch(OperationCanceledException) when(!ct.IsCancellationRequested){holidayFallbackUsed=true;return BuiltInCountryHolidays(country,year);}
+   catch(OperationCanceledException){throw;}
+   catch{holidayFallbackUsed=true;return BuiltInCountryHolidays(country,year);}
  }
  async Task LoadCalendarHolidays(CancellationToken ct){
-  holidayCalendarError="";var year=DateTime.Now.Year;
+  holidayCalendarError="";holidayFallbackUsed=false;var year=DateTime.Now.Year;
   var requests=HolidayCountries.SelectMany(c=>new[]{year,year+1}.Select(y=>LoadCountryHolidays(c,y,ct))).ToArray();
   var results=await Task.WhenAll(requests);calendarHolidays=results.SelectMany(x=>x).GroupBy(x=>(x.CountryCode,x.Name,x.Start)).Select(g=>g.First()).OrderBy(x=>x.Start).ThenBy(x=>x.Country).ToList();
   if(calendarHolidays.Count==0)holidayCalendarError="Public holiday calendars could not be loaded.";
+  else if(holidayFallbackUsed)holidayCalendarError="Using the built-in public-holiday calendar for one or more regions because the online calendar was unavailable.";
  }
  IReadOnlyList<CalendarHoliday> UpcomingHolidays(bool applyFilter=true){var today=DateOnly.FromDateTime(DateTime.Now);IEnumerable<CalendarHoliday> rows=calendarHolidays.Where(h=>h.End>=today);if(applyFilter&&holidayCountryFilter!="ALL")rows=rows.Where(h=>h.CountryCode==holidayCountryFilter);return rows.OrderBy(h=>h.Start).ThenBy(h=>h.Country).ToList();}
+ IReadOnlyList<CalendarHoliday> HomeHolidays(){var rows=UpcomingHolidays();if(holidayCountryFilter!="ALL")return rows.Take(12).ToList();return rows.GroupBy(h=>h.CountryCode).SelectMany(g=>g.Take(2)).OrderBy(h=>h.Start).ThenBy(h=>h.Country).ToList();}
  IReadOnlyList<CalendarHoliday> VisibleHolidays(){var rows=UpcomingHolidays();return showAllDaysOff?rows:rows.Take(1).ToList();}
  void SetHolidayCountry(string code){holidayCountryFilter=code;showAllDaysOff=false;}
  bool InSelectedSprint(CalendarHoliday holiday)=>CurrentSprint?.Start is {} start&&CurrentSprint.Finish is {} finish&&holiday.End>=DateOnly.FromDateTime(start.DateTime)&&holiday.Start<=DateOnly.FromDateTime(finish.DateTime);
  int HiddenDaysOffCount()=>Math.Max(0,UpcomingDaysOff().Count+UpcomingHolidays().Count-VisibleDaysOff().Count-VisibleHolidays().Count);
+ string HolidayCalendarForPerson(string personId)=>PlanningPrefs.HolidayCalendarByPerson.GetValueOrDefault(personId,"");
+ string HolidayCalendarName(string personId){var code=HolidayCalendarForPerson(personId);return HolidayCountries.FirstOrDefault(c=>c.Code==code)?.Name??"";}
+ HashSet<DateOnly> UnavailableWorkingDates(string personId,Iteration iteration){
+  var dates=new HashSet<DateOnly>();
+  if(iteration.Start is not {} start||iteration.Finish is not {} finish)return dates;
+  var first=DateOnly.FromDateTime(start.Date),last=DateOnly.FromDateTime(finish.Date);
+  foreach(var range in DaysOff(personId)){
+   var from=DateOnly.FromDateTime(range.Start.Date),to=DateOnly.FromDateTime(range.End.Date);
+   for(var day=from;day<=to;day=day.AddDays(1))if(day>=first&&day<=last&&day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)dates.Add(day);
+  }
+  var calendar=HolidayCalendarForPerson(personId);
+  if(calendar!="")foreach(var holiday in calendarHolidays.Where(h=>h.CountryCode==calendar&&h.End>=first&&h.Start<=last))
+    for(var day=holiday.Start;day<=holiday.End;day=day.AddDays(1))if(day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)dates.Add(day);
+  return dates;
+ }
  bool Blocked(WorkItem w)=>w.Tags.Any(t=>prefs.BlockedTags.Contains(t,StringComparer.OrdinalIgnoreCase));
  int WorkGroupRank(WorkItem w)=>meta is not null&&Quality.Finished(w,meta)?0:Blocked(w)?1:2;
  string WorkGroupName(WorkItem w)=>WorkGroupRank(w) switch{0=>"Done",1=>"Blocked",_=>"Active"};
  IReadOnlyList<PersonLane> PeopleLanes(){if(meta is null)return [];IEnumerable<WorkItem> scoped=Visible.Where(w=>w.OwnerId!="");if(screen=="daily"&&dailyActiveOnly)scoped=scoped.Where(w=>!Quality.Finished(w,meta));var rows=scoped.ToList();return meta.People.Select(p=>new PersonLane(p.Id,p.Name,rows.Where(w=>w.OwnerId==p.Id).OrderBy(WorkGroupRank).ThenBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList())).Where(l=>l.Items.Count>0).ToList();}
- double PlannedCapacityHours(string personId,Iteration? iteration){if(iteration?.Start is not {} start||iteration.Finish is not {} finish||!capacityByIteration.TryGetValue(iteration.Id,out var capacity))return 0;var member=capacity.Members.FirstOrDefault(m=>m.PersonId==personId);if(member is null||member.CapacityPerDay<=0)return 0;var off=capacity.TeamDaysOff.Concat(member.DaysOff).ToArray();var working=0;for(var day=start.Date;day<=finish.Date;day=day.AddDays(1)){if(day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)continue;if(off.Any(r=>day>=r.Start.Date&&day<=r.End.Date))continue;working++;}return working*member.CapacityPerDay;}
+ double ConfiguredCapacityHours(string personId,Iteration? iteration){
+  var hours=PlanningPrefs.PersonCapacityHours.GetValueOrDefault(personId,PlanningPrefs.DefaultTarget.Maximum);
+  if(iteration is not null&&PlanningPrefs.CapacityOverrides.TryGetValue(PlanningSettings.CapacityKey(personId,iteration.Id),out var sprintTarget))hours=sprintTarget.Maximum;
+  return Math.Max(0,hours);
+ }
+ double PlannedCapacityHours(string personId,Iteration? iteration){
+  var configured=ConfiguredCapacityHours(personId,iteration);
+  if(iteration?.Start is not {} start||iteration.Finish is not {} finish)return configured;
+  var first=DateOnly.FromDateTime(start.Date),last=DateOnly.FromDateTime(finish.Date);
+  var workingDays=new List<DateOnly>();for(var day=first;day<=last;day=day.AddDays(1))if(day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)workingDays.Add(day);
+  if(workingDays.Count==0)return configured;
+  var today=DateOnly.FromDateTime(DateTime.Now);var unavailable=UnavailableWorkingDates(personId,iteration);
+  var remaining=workingDays.Count(day=>day>=today&&!unavailable.Contains(day));
+  return Math.Max(0,configured*remaining/workingDays.Count);
+ }
  int DailyActiveCount(PersonLane lane)=>meta is null?lane.Items.Count:lane.Items.Count(w=>!Quality.Finished(w,meta));
  int DailyDoneCount(PersonLane lane)=>meta is null?0:lane.Items.Count(w=>Quality.Finished(w,meta));
  double DailyEffort(PersonLane lane)=>meta is null?lane.Items.Sum(w=>w.Estimate??0):lane.Items.Where(w=>!Quality.Finished(w,meta)).Sum(w=>Planning.Estimate(w,PlanningPrefs)??0);
@@ -153,7 +197,7 @@ public partial class Home {
  sealed class MeetingActionDraft {public bool Selected {get;set;}=true;public string Title {get;set;}="";public string Description {get;set;}="";public string AcceptanceCriteria {get;set;}="";public string Owner {get;set;}="";public string Sprint {get;set;}="current";public double? SuggestedEstimate {get;set;}public string TagsText {get;set;}="";public int? CreatedId {get;set;}public string CreatedUrl {get;set;}="";}
  IReadOnlyList<AttentionRow> HomeAttention(){var rows=CurrentOpenItems.ToArray();var list=new List<AttentionRow>();void Add(string key,string label,int count,string hint){if(count>0)list.Add(new(key,label,count,hint));}Add("blocked","Blocked work",rows.Count(Blocked),"Needs an unblock or dependency decision");Add("unassigned","Unassigned",rows.Count(w=>w.OwnerId==""),"Give the work a clear owner");if(ApplicationTags().Length>0)Add("missing-app","Missing application tag",rows.Count(w=>!HasApplicationTag(w)),"Classify work so application load stays useful");if(InitiativeTags().Length>0)Add("missing-initiative","Missing initiative tag",rows.Count(w=>!HasInitiativeTag(w)),"Keep initiative scope visible");Add("stale","Stagnating work",rows.Count(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),$"No change for more than {prefs.StaleDays} days");return list;}
  List<HomeGroup> Remaining(TagDimension dimension){var configured=PlanningPrefs.Tags.Where(t=>dimension==TagDimension.Application?t.Application:t.Initiative).Select(t=>t.Tag).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();return configured.Select(tag=>{var rows=OpenPlanningItems.Where(w=>w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)).ToArray();return new HomeGroup(tag,rows.Length,rows.Sum(w=>Planning.Estimate(w,PlanningPrefs)??0));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Count).ThenBy(x=>x.Name).ToList();}
- List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours||capacity<=0?0:(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Confirm hour estimates":capacity<=0?"No capacity":effort>capacity?"Over capacity":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
+ List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":missing>0?"Estimates missing":effort>capacity?"Over capacity":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
  InitiativeMetadata Initiative(string tag){var key=prefs.InitiativeMetadata.Keys.FirstOrDefault(k=>k.Equals(tag,StringComparison.OrdinalIgnoreCase));if(key is not null)return prefs.InitiativeMetadata[key];var value=new InitiativeMetadata();prefs.InitiativeMetadata[tag]=value;return value;}
  List<InitiativeRow> InitiativeRows(){var today=DateOnly.FromDateTime(DateTime.Now);return Remaining(TagDimension.Initiative).Select(g=>{var m=Initiative(g.Name);var attention=m.Status is "At Risk" or "Blocked"||m.Confidence=="Low"||(m.DueDate is {} due&&due<=today.AddDays(14));return new InitiativeRow(g.Name,g.Count,g.Effort,m,attention);}).OrderByDescending(x=>x.NeedsAttention).ThenBy(x=>x.Meta.DueDate??DateOnly.MaxValue).ThenBy(x=>x.Tag).ToList();}
  IEnumerable<(string Id,string Name,int Count)> FilterPeople=>items.GroupBy(w=>w.OwnerId).Select(g=>(Id:g.Key,Name:PersonName(g.Key),Count:g.Count())).Where(x=>filterOptionSearch==""||x.Name.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Name=="Unassigned").ThenBy(x=>x.Name);
@@ -225,6 +269,13 @@ __MEETING_NOTES__
  void ClearDailyFocus()=>dailyFocusOwner="";
  void MoveDailyFocus(int delta){var lanes=PeopleLanes();if(lanes.Count==0){dailyFocusOwner="";return;}var index=lanes.ToList().FindIndex(l=>l.Id==dailyFocusOwner);if(index<0)index=0;else index=Math.Clamp(index+delta,0,lanes.Count-1);dailyFocusOwner=lanes[index].Id;}
  void SetPlanningHours(ChangeEventArgs e)=>PlanningPrefs.EstimatesAreHours=e.Value is true;
+ static bool TryHours(ChangeEventArgs e,out double hours){var text=e.Value?.ToString()??"";return (double.TryParse(text,NumberStyles.Float,CultureInfo.InvariantCulture,out hours)||double.TryParse(text,NumberStyles.Float,CultureInfo.CurrentCulture,out hours))&&double.IsFinite(hours)&&hours>=0;}
+ void SetDefaultCapacityHours(ChangeEventArgs e){if(!TryHours(e,out var hours))return;var current=PlanningPrefs.DefaultTarget;PlanningPrefs.DefaultTarget=new(Math.Min(current.Minimum,hours),hours);}
+ double PersonCapacityHours(string personId)=>PlanningPrefs.PersonCapacityHours.GetValueOrDefault(personId,PlanningPrefs.DefaultTarget.Maximum);
+ bool HasPersonCapacityHours(string personId)=>PlanningPrefs.PersonCapacityHours.ContainsKey(personId);
+ void SetPersonCapacityHours(string personId,ChangeEventArgs e){if(TryHours(e,out var hours))PlanningPrefs.PersonCapacityHours[personId]=hours;}
+ void ClearPersonCapacityHours(string personId)=>PlanningPrefs.PersonCapacityHours.Remove(personId);
+ void SetPersonHolidayCalendar(string personId,ChangeEventArgs e){var value=e.Value?.ToString()??"";if(value=="")PlanningPrefs.HolidayCalendarByPerson.Remove(personId);else if(HolidayCountries.Any(c=>c.Code==value))PlanningPrefs.HolidayCalendarByPerson[personId]=value;}
  async Task SearchDailyWork(){dailyLookupBusy=true;try{var q=dailyLookupText.Trim();dailyLookupResults=[];if(q=="")return;if(int.TryParse(q,out var id)){var found=planningItems.FirstOrDefault(w=>w.Id==id);if(found is null)found=await Tracker.GetAsync(id,lifetime.Token);if(found is not null&&!items.Any(w=>w.Id==found.Id))dailyLookupResults.Add(found);}else{dailyLookupResults=planningItems.Where(w=>!items.Any(x=>x.Id==w.Id)&&(w.Title.Contains(q,StringComparison.OrdinalIgnoreCase)||w.Tags.Any(t=>t.Contains(q,StringComparison.OrdinalIgnoreCase)))).OrderByDescending(w=>w.Changed).Take(8).ToList();}}catch(Exception e){Error(e);}finally{dailyLookupBusy=false;}}
  async Task AddDailyItem(WorkItem source){if(CurrentSprint is null)return;if(busy.Contains(source.Id))return;busy.Add(source.Id);try{var fresh=await Tracker.GetAsync(source.Id,lifetime.Token);var saved=fresh;if(!fresh.Iteration.Equals(CurrentSprint.Path,StringComparison.OrdinalIgnoreCase))saved=await Tracker.UpdateAsync(new(fresh,[new Change(ItemField.Iteration,CurrentSprint.Path)]),lifetime.Token);var index=items.FindIndex(w=>w.Id==saved.Id);if(index>=0)items[index]=saved;else items.Add(saved);dailyLookupResults.RemoveAll(w=>w.Id==saved.Id);sprintCache.Clear();Notify($"#{saved.Id} added to {CurrentSprint.Name}.");}catch(Exception e){Error(e);}finally{busy.Remove(source.Id);}}
  async Task OpenDailyPanel(WorkItem w){detail=null;dailyPanelItem=w;dailyPanelLoading=true;dailyComments=[];dailyTagText=dailyCommentText="";try{dailyComments=(await Tracker.CommentsAsync(w.Id,lifetime.Token)).ToList();}catch(Exception e){Error(e);}finally{dailyPanelLoading=false;}}
