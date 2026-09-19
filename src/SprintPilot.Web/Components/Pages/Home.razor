@@ -144,7 +144,7 @@ else if(dialog=="smartfix") {
 <div class="toolbar smart-fix-actions"><button @onclick="()=>smartFixSuggestions=[]">Back to Copilot result</button><button class="primary" @onclick="ReviewSmartFix">Review selected changes</button></div>
 }}
 else if(dialog=="bulk") {
-<p>@selected.Count selected items, including any hidden by filters.</p><label>@BulkLabel
+<p>@SelectedItems.Count visible selected item(s). Hidden rows are never included in this action.</p><label>@BulkLabel
 @if(bulkKind=="Owner"){<select @bind="bulkValue"><option value="">Unassigned</option>@foreach(var p in meta!.People){<option value="@p.UniqueName">@p.Name</option>}</select>}
 else if(bulkKind=="State"){<select @bind="bulkValue"><option value="">Choose state…</option>@foreach(var s in CommonStates){<option>@s</option>}</select>}
 else if(bulkKind is "Iteration" or "Next" or "Previous"){<select @bind="bulkValue"><option value="">Choose sprint…</option>@foreach(var i in meta!.Iterations){<option value="@i.Path">@i.Name</option>}</select>}
