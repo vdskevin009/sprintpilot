@@ -21,6 +21,11 @@ Check(fake.SawExpand,"Batch request expands fields and relationships so backlog 
 var saved=await tracker.UpdateAsync(new(rows[0],[new(ItemField.Estimate,8d)]));Check(saved.Revision==2,"Updated authoritative revision is returned");
 Check(fake.LastPatch![0]!["op"]!.ToString()=="test"&&fake.LastPatch[0]!["path"]!.ToString()=="/rev"&&fake.LastPatch[0]!["value"]!.GetValue<int>()==1,"Revision test is first patch operation");
 Check(fake.LastPatch[1]!["path"]!.ToString()=="/fields/Microsoft.VSTS.Scheduling.Effort","Patch uses discovered process field");
+var tagged=rows[0] with{Tags=["API","Platform"]};
+await tracker.UpdateAsync(new(tagged,[new(ItemField.Tags,"API")]));
+Check(fake.LastPatch![1]!["op"]!.ToString()=="replace"&&fake.LastPatch[1]!["path"]!.ToString()=="/fields/System.Tags"&&fake.LastPatch[1]!["value"]!.ToString()=="API","Removing one tag replaces System.Tags with the remaining tags");
+await tracker.UpdateAsync(new(tagged,[new(ItemField.Tags,"")]));
+Check(fake.LastPatch![1]!["op"]!.ToString()=="remove"&&fake.LastPatch[1]!["path"]!.ToString()=="/fields/System.Tags","Removing the last tag removes System.Tags instead of writing an empty value");
 var reordered=await tracker.UpdateAsync(new(saved,[new(ItemField.Order,900d)]));Check(reordered.Order==900,"Backlog order is returned after update");
 Check(fake.LastPatch![1]!["path"]!.ToString()=="/fields/Microsoft.VSTS.Common.BacklogPriority","Order uses Azure DevOps process configuration field");
 var before=fake.PatchCalls;try{await tracker.UpdateAsync(new(rows[0],[new(ItemField.Acceptance,"unsupported")]));throw new Exception("Unsupported field accepted");}catch(TrackerException){Check(fake.PatchCalls==before,"Unsupported field rejected before mutation");}
