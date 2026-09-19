@@ -579,3 +579,10 @@ button.primary{font-weight:600}
 .update-app-button{color:var(--success);border-color:color-mix(in srgb,var(--success) 55%,var(--border));background:color-mix(in srgb,var(--success) 10%,var(--surface));font-weight:700}
 .update-app-button:hover{border-color:var(--success)}
 @media(max-width:700px){.home-actions{justify-content:flex-start}}
+
+
+/* Sprint Workspace filter refinement. */
+.compact-filter-group{flex:0 0 auto}
+.blocked-filter.active{color:#e69422;border-color:#f59e0b;background:color-mix(in srgb,#f59e0b 14%,var(--surface))}
+.filter-group .filter-pills.horizontal{max-width:min(36vw,520px)}
+@media(max-width:1000px){.filter-group .filter-pills.horizontal{max-width:none}}
