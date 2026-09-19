@@ -147,9 +147,11 @@ public partial class Home {
  HashSet<DateOnly> UnavailableWorkingDates(string personId,Iteration iteration){
   var dates=new HashSet<DateOnly>();
   if(iteration.Start is not {} start||iteration.Finish is not {} finish)return dates;
-  var first=DateOnly.FromDateTime(start.Date),last=DateOnly.FromDateTime(finish.Date);
+  var first=DateOnly.FromDateTime(start.Date);
+  var last=DateOnly.FromDateTime(finish.Date);
   foreach(var range in DaysOff(personId)){
-   var from=DateOnly.FromDateTime(range.Start.Date),to=DateOnly.FromDateTime(range.End.Date);
+   var from=DateOnly.FromDateTime(range.Start.Date);
+   var to=DateOnly.FromDateTime(range.End.Date);
    for(var day=from;day<=to;day=day.AddDays(1))if(day>=first&&day<=last&&day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)dates.Add(day);
   }
   var calendar=HolidayCalendarForPerson(personId);
@@ -169,7 +171,8 @@ public partial class Home {
  double PlannedCapacityHours(string personId,Iteration? iteration){
   var configured=ConfiguredCapacityHours(personId,iteration);
   if(iteration?.Start is not {} start||iteration.Finish is not {} finish)return configured;
-  var first=DateOnly.FromDateTime(start.Date),last=DateOnly.FromDateTime(finish.Date);
+  var first=DateOnly.FromDateTime(start.Date);
+  var last=DateOnly.FromDateTime(finish.Date);
   var workingDays=new List<DateOnly>();for(var day=first;day<=last;day=day.AddDays(1))if(day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)workingDays.Add(day);
   if(workingDays.Count==0)return configured;
   var today=DateOnly.FromDateTime(DateTime.Now);var unavailable=UnavailableWorkingDates(personId,iteration);
