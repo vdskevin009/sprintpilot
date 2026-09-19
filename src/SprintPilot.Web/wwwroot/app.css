@@ -96,3 +96,28 @@ html,body{height:auto;overflow:auto}
 .planning-tag-manager p{font-size:12px;margin:0;color:var(--muted)}
 .planning-tag-manager table{margin-top:12px}
 .planning-tag-manager th{position:static}
+
+
+/* Daily Board leave summary and fixed-height owner lanes. */
+.days-off-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 10px;margin:10px 0 4px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:11px;flex:0 0 auto}
+.days-off-summary-title{display:flex;align-items:baseline;gap:7px;margin-right:3px}
+.days-off-summary-title>span{color:var(--muted)}
+.days-off-periods{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
+.leave-period{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border:1px solid var(--border);border-radius:999px;background:var(--hover);white-space:nowrap}
+.leave-period em{font-style:normal;font-size:9px;padding:2px 5px;border-radius:999px}
+.current-sprint-leave{color:var(--accent);background:var(--accent-bg)}
+.other-sprint-leave{color:var(--muted);border:1px solid var(--border)}
+.days-off-more{margin-left:auto!important;font-size:11px!important;padding:4px 6px!important}
+.sprint-workspace .person-column{height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.sprint-workspace .person-column>header{flex:0 0 auto}
+.sprint-workspace .person-column>.people-card{flex:0 0 150px;height:150px;box-sizing:border-box;overflow:hidden}
+.sprint-workspace .person-column{overflow-y:auto;scrollbar-gutter:stable}
+.sprint-workspace .people-card .people-card-title{min-height:38px;max-height:38px;overflow:hidden}
+.sprint-workspace .people-card .tags{min-height:24px;max-height:28px;overflow:hidden}
+.sprint-workspace .people-assignee{margin-top:auto}
+@media(max-width:700px){
+ .days-off-summary{align-items:flex-start}
+ .days-off-summary-title{width:100%}
+ .days-off-more{margin-left:0!important}
+ .sprint-workspace .person-column{height:520px;max-height:520px;overflow-y:auto}
+}
