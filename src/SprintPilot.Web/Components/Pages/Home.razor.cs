@@ -75,7 +75,9 @@ public partial class Home {
  void ToggleOwner(string id){if(!ownerFilters.Add(id))ownerFilters.Remove(id);}
  void ToggleCleanupTag(string tag){if(!cleanupTagFilters.Add(tag))cleanupTagFilters.Remove(tag);}
  void SelectVisibleAndMoveNext(){selected.Clear();foreach(var w in Visible)selected.Add(w.Id);StartBulk("Next");}
- IEnumerable<IGrouping<string,WorkItem>> PeopleGroups()=>Visible.Where(w=>!Quality.Finished(w,meta!)).GroupBy(w=>w.OwnerId).OrderBy(g=>g.Key=="").ThenBy(g=>meta!.People.FirstOrDefault(p=>p.Id==g.Key)?.Name??"Unassigned");
+ sealed record PersonLane(string Id,string Name,IReadOnlyList<WorkItem> Items);
+ IReadOnlyList<PersonLane> PeopleLanes(){if(meta is null)return [];var active=Visible.Where(w=>!Quality.Finished(w,meta)).ToList();var lanes=meta.People.Select(p=>new PersonLane(p.Id,p.Name,active.Where(w=>w.OwnerId==p.Id).ToList())).ToList();var unassigned=active.Where(w=>w.OwnerId=="").ToList();if(unassigned.Count>0)lanes.Insert(0,new("","Unassigned",unassigned));return lanes;}
+ string OwnerValue(WorkItem w)=>meta?.People.FirstOrDefault(p=>p.Id==w.OwnerId)?.UniqueName??w.Owner;
  string PersonName(string id)=>meta?.People.FirstOrDefault(p=>p.Id==id)?.Name??"Unassigned";
  string[] SuggestedTags(WorkItem item){var words=item.Title.Split(' ',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Where(w=>w.Length>=4).ToHashSet(StringComparer.OrdinalIgnoreCase);return tagHistory.Where(w=>w.Id!=item.Id&&w.Tags.Length>0&&w.Title.Split(' ',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Count(words.Contains)>0).SelectMany(w=>w.Tags).Where(t=>!item.Tags.Contains(t,StringComparer.OrdinalIgnoreCase)).GroupBy(t=>t,StringComparer.OrdinalIgnoreCase).OrderByDescending(g=>g.Count()).ThenBy(g=>g.Key).Take(3).Select(g=>g.Key).ToArray();}
  Task AddSuggestedTag((WorkItem Item,string Tag) value)=>InlineEdit((value.Item,ItemField.Tags,string.Join("; ",value.Item.Tags.Append(value.Tag).Distinct(StringComparer.OrdinalIgnoreCase))));
