@@ -68,6 +68,14 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   cached=new(teams,people.ToArray(),iterations,areas.ToArray(),types.ToArray(),scope,await meTask);cacheKey=key;expires=DateTimeOffset.UtcNow.AddMinutes(15);return cached;
  }finally{metadataGate.Release();}}
  public static string WiqlLiteral(string s)=>s.Replace("'","''");
+ public async Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default){
+  var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);var team=meta.Teams.FirstOrDefault(t=>t.Id==c.Connection.Team||t.Name==c.Connection.Team)??meta.Teams.First();
+  DateRange[] Ranges(JsonNode? node)=>((JsonArray?)node??[]).Select(r=>new{Start=S(r?["start"]),End=S(r?["end"])}).Where(r=>DateTimeOffset.TryParse(r.Start,out _)&&DateTimeOffset.TryParse(r.End,out _)).Select(r=>new DateRange(DateTimeOffset.Parse(r.Start,CultureInfo.InvariantCulture),DateTimeOffset.Parse(r.End,CultureInfo.InvariantCulture))).ToArray();
+  var capacity=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/capacities",HttpMethod.Get,ct:ct);
+  var members=((JsonArray?)capacity["teamMembers"]??(JsonArray?)capacity["value"]??[]).Select(n=>{var person=n?["teamMember"];return new MemberCapacity(S(person?["id"]),S(person?["displayName"]),Ranges(n?["daysOff"]));}).Where(m=>m.PersonId!="").ToArray();
+  var teamDays=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/teamdaysoff",HttpMethod.Get,ct:ct);
+  return new SprintCapacity(members,Ranges(teamDays["daysOff"]));
+ }
  public async Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){
   var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);
   if(meta.Scope.Length==0)throw new TrackerException("The selected team has no configured area paths.");
