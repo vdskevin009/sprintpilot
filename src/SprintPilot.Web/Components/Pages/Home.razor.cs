@@ -9,7 +9,7 @@ public partial class Home {
  PlanningPage? planner;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="workspace",message="",dialog="",dialogError="";
- bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed;
+ bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff;
  int sprintIndex,selectionAnchor=-1,templateIndex;
  string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
@@ -76,9 +76,15 @@ public partial class Home {
  void ToggleCleanupTag(string tag){if(!cleanupTagFilters.Add(tag))cleanupTagFilters.Remove(tag);}
  void SelectVisibleAndMoveNext(){selected.Clear();foreach(var w in Visible)selected.Add(w.Id);StartBulk("Next");}
  sealed record PersonLane(string Id,string Name,IReadOnlyList<WorkItem> Items);
- DateRange[] DaysOff(string personId)=>sprintCapacity.TeamDaysOff.Concat(sprintCapacity.Members.FirstOrDefault(m=>m.PersonId==personId)?.DaysOff??[]).OrderBy(r=>r.Start).ToArray();
- string DaysOffText(string personId){var ranges=DaysOff(personId);if(ranges.Length==0)return "";return string.Join(", ",ranges.Select(r=>r.Start.Date==r.End.Date?$"{r.Start:MMM d}":$"{r.Start:MMM d}–{r.End:MMM d}"));}
+ DateRange[] DaysOff(string personId)=>sprintCapacity.TeamDaysOff.Concat(sprintCapacity.Members.FirstOrDefault(m=>m.PersonId==personId)?.DaysOff??[]).Distinct().OrderBy(r=>r.Start).ToArray();
+ string RangeText(DateRange r)=>r.Start.Date==r.End.Date?$"{r.Start:MMM d}":$"{r.Start:MMM d}–{r.End:MMM d}";
+ string DaysOffText(string personId){var ranges=DaysOff(personId);if(ranges.Length==0)return "";return string.Join(", ",ranges.Select(RangeText));}
  bool OffToday(string personId){var today=DateTimeOffset.Now.Date;return DaysOff(personId).Any(r=>today>=r.Start.Date&&today<=r.End.Date);}
+ bool InSelectedSprint(DateRange r)=>CurrentSprint?.Start is {} start&&CurrentSprint.Finish is {} finish&&r.End.Date>=start.Date&&r.Start.Date<=finish.Date;
+ DateRange? NextDaysOff(string personId){var today=DateTimeOffset.Now.Date;return DaysOff(personId).Where(r=>r.End.Date>=today).OrderBy(r=>r.Start).FirstOrDefault();}
+ IReadOnlyList<(string PersonId,string Name,DateRange Range)> UpcomingDaysOff(){if(meta is null)return [];var today=DateTimeOffset.Now.Date;var rows=new List<(string,string,DateRange)>();foreach(var p in meta.People){foreach(var r in DaysOff(p.Id).Where(r=>r.End.Date>=today))rows.Add((p.Id,p.Name,r));}return rows.Distinct().OrderBy(x=>x.Item3.Start).ToList();}
+ IReadOnlyList<(string PersonId,string Name,DateRange Range)> VisibleDaysOff(){var rows=UpcomingDaysOff();if(showAllDaysOff)return rows;var firstByPerson=rows.GroupBy(x=>x.PersonId).Select(g=>g.OrderBy(x=>x.Range.Start).First()).OrderBy(x=>x.Range.Start).ToList();return firstByPerson;}
+ int HiddenDaysOffCount()=>Math.Max(0,UpcomingDaysOff().Count-VisibleDaysOff().Count);
  IReadOnlyList<PersonLane> PeopleLanes(){if(meta is null)return [];var active=Visible.Where(w=>!Quality.Finished(w,meta)).ToList();var lanes=meta.People.Select(p=>new PersonLane(p.Id,p.Name,active.Where(w=>w.OwnerId==p.Id).ToList())).Where(l=>l.Items.Count>0).ToList();var unassigned=active.Where(w=>w.OwnerId=="").ToList();if(unassigned.Count>0)lanes.Insert(0,new("","Unassigned",unassigned));return lanes;}
  CapacityTarget DailyTarget(string personId){var iteration=CurrentSprint;if(iteration is null)return prefs.PlanningProfiles.GetValueOrDefault(PlanningProfileKey)?.DefaultTarget??new();var settings=prefs.PlanningProfiles.GetValueOrDefault(PlanningProfileKey);return settings?.CapacityOverrides.GetValueOrDefault(PlanningSettings.CapacityKey(personId,iteration.Id),settings.DefaultTarget)??new();}
  double DailyEffort(PersonLane lane)=>lane.Items.Sum(w=>w.Estimate??0);
