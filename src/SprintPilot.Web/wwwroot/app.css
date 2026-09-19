@@ -44,3 +44,27 @@ html,body{height:auto;overflow:auto}
 .sprint-workspace .grid-wrap{flex:none;height:60vh;min-height:220px;max-height:60vh}
 .sprint-workspace .people-board{flex:none;max-height:none;overflow:visible}
 }
+
+
+/* Daily Board compact layout and overflow fixes. */
+.sprint-workspace .people-board-heading{margin:12px 0 8px;flex:0 0 auto}
+.sprint-workspace .people-board{display:flex;gap:12px;overflow-x:auto;overflow-y:auto;align-items:flex-start;align-content:flex-start;padding:0 0 10px;scrollbar-gutter:stable;overscroll-behavior:contain}
+.sprint-workspace .person-column{flex:0 0 290px;width:290px;min-width:290px;min-height:150px;box-sizing:border-box}
+.sprint-workspace .people-card{min-width:0;overflow:hidden}
+.sprint-workspace .people-card-title{min-width:0}
+.sprint-workspace .people-card-title .title-button{min-width:0;overflow-wrap:anywhere}
+.sprint-workspace .people-card .tags{margin-top:8px}
+.sprint-workspace .people-assignee{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px}
+.sprint-workspace .people-assignee>span{white-space:nowrap;color:var(--muted)}
+.sprint-workspace .people-assignee select{width:100%;min-width:0;max-width:100%;border:1px solid var(--border);border-radius:5px;background:var(--surface);padding:6px 28px 6px 8px}
+.multi-options label{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.multi-options label input[type=checkbox]{flex:0 0 auto;margin:0}
+.sprint-workspace .page-heading{margin-bottom:12px}
+.sprint-workspace .sprint-bar{margin-bottom:14px}
+.sprint-workspace .view-tabs{padding-bottom:9px}
+.sprint-workspace .filter-bar{padding-top:10px}
+.sprint-workspace .grid-status{margin:10px 0 8px}
+@media(max-width:700px){
+  .sprint-workspace .people-board{display:flex;overflow-x:auto;overflow-y:visible;padding-bottom:12px}
+  .sprint-workspace .person-column{flex-basis:270px;width:270px;min-width:270px}
+}
