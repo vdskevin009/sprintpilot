@@ -534,3 +534,40 @@ button.primary{font-weight:600}
 .tag-add-input::placeholder{color:var(--muted)}
 .tag-suggestion-label{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-left:3px}
 .tag-add-row .tag-suggestion{padding:4px 7px}
+
+
+/* Smart Fix workflow and capacity-row alignment. */
+.sprint-capacity-card .capacity-list>button{grid-template-columns:minmax(0,1fr) 140px 132px;column-gap:10px;align-items:center}
+.sprint-capacity-card .capacity-meter{width:100%;min-width:0}
+.sprint-capacity-card .capacity-state{width:132px;box-sizing:border-box;justify-self:end;display:flex;flex-direction:column;align-items:center;gap:1px;white-space:normal;text-align:center;border-radius:9px;line-height:1.15}
+.sprint-capacity-card .capacity-state strong{font-size:10px;font-weight:700}
+.sprint-capacity-card .capacity-state small{font-size:9px;font-weight:600;opacity:.9;font-variant-numeric:tabular-nums}
+.sprint-capacity-card .capacity-leave{font-weight:600;color:var(--accent)}
+.smart-fix-trigger{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--accent-bg)}
+.smart-fix-trigger:hover{border-color:var(--accent)}
+.smart-fix-gaps,.smart-fix-suggestions{display:flex;flex-direction:column;gap:8px;max-height:32vh;overflow:auto;margin:10px 0 14px;padding-right:4px}
+.smart-fix-gaps article,.smart-fix-suggestions article{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:10px}
+.smart-fix-gaps article>header,.smart-fix-suggestions article>header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:7px}
+.smart-fix-gaps article>header strong,.smart-fix-suggestions article>header strong{font-size:11px}
+.smart-fix-gaps article>header>span,.smart-fix-suggestions article>header>span{font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.smart-fix-suggestions article>header div{min-width:0}
+.smart-fix-suggestions article>header small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.smart-fix-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.smart-fix-option{display:grid!important;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:8px!important;margin:0!important;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--hover)}
+.smart-fix-option input{margin-top:2px}
+.smart-fix-option span{min-width:0}
+.smart-fix-option strong,.smart-fix-option small{display:block}
+.smart-fix-option strong{font-size:10px}
+.smart-fix-option small{margin-top:2px;color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+.smart-fix-actions{justify-content:flex-end;margin:9px 0 13px}
+@media(max-width:900px){
+ .sprint-capacity-card .capacity-list>button{grid-template-columns:minmax(0,1fr) 105px 118px}
+ .sprint-capacity-card .capacity-state{width:118px}
+ .smart-fix-options{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+ .sprint-capacity-card .capacity-list>button{grid-template-columns:minmax(0,1fr) 96px;row-gap:5px}
+ .sprint-capacity-card .capacity-state{grid-column:2;grid-row:2;width:96px}
+ .sprint-capacity-card .capacity-baseline,.sprint-capacity-card .capacity-leave,.sprint-capacity-card .missing-estimate{grid-column:1 / -1}
+ .smart-fix-gaps article>header,.smart-fix-suggestions article>header{flex-direction:column;gap:4px}
+}
