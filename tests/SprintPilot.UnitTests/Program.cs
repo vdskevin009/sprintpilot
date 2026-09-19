@@ -25,6 +25,7 @@ var preferences=new Preferences();foreach(var k in preferences.QualityWeights.Ke
 Check(Quality.Evaluate(original,preferences,rows).Score==0,"Disabled quality rules do not divide by zero");
 Check(Quality.Similar("Handle API timeout errors","API timeout errors handle"),"Similar titles use token overlap");
 Check(!Quality.Similar("",""),"Empty titles do not cause a similarity division error");
+Check(!Quality.Issues(original with{Parent=null},meta,new Preferences(),rows,sprint).Contains("Missing parent"),"Missing parents are not treated as sprint cleanup work");
 var moved=ItemChanges.Apply(rows[1],[new(ItemField.Iteration,meta.Iterations[2].Path)],meta);Check(rows[1].Iteration==sprint.Path&&moved.Iteration!=sprint.Path,"Optimistic changes preserve rollback snapshot");
 
 var example=PlanningExample.Create(new DateOnly(2026,9,15));
@@ -75,4 +76,3 @@ Reject(()=>Planning.Validate(example.Settings),"Invalid capacity band rejected")
 var empty=Planning.Build([],example.Metadata,new PlanningSettings(),example.Today,DateTimeOffset.UtcNow);
 Check(empty.Periods.All(p=>p.KnownEstimate==0)&&empty.People.Length==4,"Empty backlog remains a valid zero-work dashboard");
 Console.WriteLine($"{checks} unit checks passed.");
-
