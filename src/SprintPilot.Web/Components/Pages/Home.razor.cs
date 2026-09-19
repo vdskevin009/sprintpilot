@@ -75,7 +75,7 @@ public partial class Home {
  async Task ChooseSprint(Iteration iteration){if(busy.Count>0||applying)return;sprintIndex=Array.IndexOf(meta!.Iterations,iteration);selected.Clear();detail=null;CloseDialog();await LoadSprint();}
  async Task Refresh(){if(screen=="planning"&&planner is not null){await planner.RefreshPlanning();return;}if(busy.Count>0||applying)return;sprintCache.Clear();await LoadSprint(true);await LoadPlanningItems(lifetime.Token);if(detail is not null)await OpenById(detail.Id);}
  async Task SetQuickView(string view){quickView=view;cleanupFilter="";if(view=="Carry-over"){loading=true;try{await LoadPrevious(refreshToken.Token);}catch(Exception e){Error(e);}finally{loading=false;}}}
- void ClearFilters(){search=ownerSearch=stateFilter=typeFilter=tagFilter=areaFilter=priorityFilter=cleanupFilter=attentionFilter="";ownerFilters.Clear();cleanupTagFilters.Clear();quickView="Team";}
+ void ClearFilters(){search=ownerSearch=stateFilter=typeFilter=tagFilter=areaFilter=priorityFilter=cleanupFilter=attentionFilter=filterOptionSearch="";ownerFilters.Clear();cleanupTagFilters.Clear();quickView="Team";}
  void ToggleOwner(string id){if(!ownerFilters.Add(id))ownerFilters.Remove(id);}
  void ToggleCleanupTag(string tag){if(!cleanupTagFilters.Add(tag))cleanupTagFilters.Remove(tag);}
  void SelectVisibleAndMoveNext(){selected.Clear();foreach(var w in Visible)selected.Add(w.Id);StartBulk("Next");}
@@ -132,6 +132,7 @@ public partial class Home {
  void LogDaily(string text){if(screen=="daily"&&!dailyActivity.Contains(text,StringComparer.OrdinalIgnoreCase))dailyActivity.Add(text);}
  IReadOnlyList<PersonLane> DailyLanes(){var lanes=PeopleLanes();return dailyFocusOwner==""?lanes:lanes.Where(l=>l.Id==dailyFocusOwner).ToList();}
  void FocusDaily(string id)=>dailyFocusOwner=dailyFocusOwner==id?"":id;
+ void ClearDailyFocus()=>dailyFocusOwner="";
  void MoveDailyFocus(int delta){var lanes=PeopleLanes();if(lanes.Count==0){dailyFocusOwner="";return;}var index=lanes.ToList().FindIndex(l=>l.Id==dailyFocusOwner);if(index<0)index=0;else index=Math.Clamp(index+delta,0,lanes.Count-1);dailyFocusOwner=lanes[index].Id;}
  void SetPlanningHours(ChangeEventArgs e)=>PlanningPrefs.EstimatesAreHours=e.Value is true;
  static double SettingNumber(ChangeEventArgs e,double fallback)=>double.TryParse(e.Value?.ToString(),NumberStyles.Float,CultureInfo.InvariantCulture,out var n)&&double.IsFinite(n)&&n>=0?n:fallback;
