@@ -12,7 +12,7 @@ public record QualityReport(int Score,QualityCheck[] Checks);
 public static class Quality {
  public static QualityReport Evaluate(WorkItem item,Preferences prefs,IEnumerable<WorkItem> peers) {
   var d=ContentText.Plain(item.Description);var a=ContentText.Plain(item.Acceptance);
-  var rules=new Dictionary<string,bool>{["Clear title"]=item.Title.Trim().Length>=12,["Description"]=d.Length>0,["Acceptance criteria"]=a.Length>0,["Parent"]=item.Parent.HasValue,["Sprint"]=item.Iteration.Length>0,["Area"]=item.Area.Length>0,["Estimate"]=item.Estimate is >0,["Assignee"]=item.OwnerId.Length>0,["Tags"]=item.Tags.Length>0,["Testing information"]=Regex.IsMatch(d+" "+a,@"\b(test|testing|validation|regression)\b",RegexOptions.IgnoreCase),["Distinct title"]=!peers.Any(x=>x.Id!=item.Id && Similar(x.Title,item.Title))};
+  var rules=new Dictionary<string,bool>{["Clear title"]=item.Title.Trim().Length>=12,["Description"]=d.Length>0,["Acceptance criteria"]=a.Length>0,["Sprint"]=item.Iteration.Length>0,["Area"]=item.Area.Length>0,["Estimate"]=item.Estimate is >0,["Assignee"]=item.OwnerId.Length>0,["Tags"]=item.Tags.Length>0,["Testing information"]=Regex.IsMatch(d+" "+a,@"\b(test|testing|validation|regression)\b",RegexOptions.IgnoreCase),["Distinct title"]=!peers.Any(x=>x.Id!=item.Id && Similar(x.Title,item.Title))};
   var checks=rules.Select(x=>new QualityCheck(x.Key,x.Value,Math.Clamp(prefs.QualityWeights.GetValueOrDefault(x.Key),0,100))).ToArray();
   var total=checks.Sum(x=>x.Weight);return new(total==0?0:(int)Math.Round(100d*checks.Where(x=>x.Passed).Sum(x=>x.Weight)/total),checks);
  }
@@ -22,7 +22,7 @@ public static class Quality {
  }
  public static string[] Issues(WorkItem w,Metadata meta,Preferences prefs,IEnumerable<WorkItem> loaded,Iteration? sprint) {
   var list=new List<string>();var done=Finished(w,meta);
-  if(!done){if(w.OwnerId=="")list.Add("Unassigned");if(w.Estimate is null or <=0)list.Add("Missing estimate");if(w.Tags.Length==0)list.Add("Missing tags");if(w.Parent is null)list.Add("Missing parent");list.Add("Unfinished");
+  if(!done){if(w.OwnerId=="")list.Add("Unassigned");if(w.Estimate is null or <=0)list.Add("Missing estimate");if(w.Tags.Length==0)list.Add("Missing tags");list.Add("Unfinished");
    if(w.Changed<DateTimeOffset.UtcNow.AddDays(-Math.Max(1,prefs.StaleDays)))list.Add("Stale");
    if(sprint?.Finish is {} end && end-DateTimeOffset.UtcNow<TimeSpan.FromDays(3) && meta.Types.FirstOrDefault(t=>t.Name==w.Type)?.States.Any(s=>s.Name==w.State && s.Category=="Proposed")==true)list.Add("Still new late in sprint");
   }
