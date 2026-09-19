@@ -286,3 +286,28 @@ html,body{height:auto;overflow:auto}
  .capacity-override-row{grid-template-columns:1fr 1fr}
  .capacity-override-row>strong{grid-column:1 / -1}
 }
+
+
+/* Daily refinement: full-title access, suggestions, Done workflow, ordering, holidays. */
+.holiday-period{border-style:dashed}
+.sprint-workspace .person-column>.people-card{flex-basis:214px;height:214px;cursor:default}
+.sprint-workspace .person-column>.people-card[draggable=true]{cursor:grab}
+.sprint-workspace .person-column>.people-card[draggable=true]:active{cursor:grabbing}
+.sprint-workspace .people-card.finished{background:var(--done-bg);opacity:.92}
+.sprint-workspace .people-card.finished .title-button{color:var(--muted)}
+.sprint-workspace .people-card .people-card-title{min-height:56px;max-height:56px}
+.sprint-workspace .people-card-title .title-button{-webkit-line-clamp:3;line-clamp:3}
+.sprint-workspace .people-card .tags{min-height:43px;max-height:43px;align-content:flex-start;white-space:normal;flex-wrap:wrap;overflow:hidden}
+.daily-tag-suggestion{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.people-card-actions .done-action{color:var(--done-text);border-color:var(--done-text)}
+.daily-side-panel h2{white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.daily-panel-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.daily-panel-fields label{margin:0}
+.daily-panel-fields select{width:100%}
+.daily-tag-suggestions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:8px}
+.daily-tag-suggestions>span{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+.people-card .done-mark{margin-left:6px}
+@media(max-width:700px){
+ .daily-panel-fields{grid-template-columns:1fr}
+ .sprint-workspace .person-column>.people-card{flex-basis:220px;height:220px}
+}
