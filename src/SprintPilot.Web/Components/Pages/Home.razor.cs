@@ -13,13 +13,13 @@ public partial class Home {
  PlanningPage? planner;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
- bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating;
+ bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,workspaceActiveOnly,workspaceBlockedOnly;
  bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
  string smartFixPrompt="",smartFixCopilotText="",appUpdateText="";
  int sprintIndex,selectionAnchor=-1,templateIndex;
- string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
+ string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",applicationFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
  int promptItemCount;
  string templateName="",templateDescription="",templateAcceptance="",templateTags="",templateArea="",blockedTagsText="",holidayCalendarError="";
@@ -41,7 +41,7 @@ public partial class Home {
  string DateRange=>CurrentSprint?.Start is {} start?$"{start:MMM d} – {CurrentSprint.Finish:MMM d, yyyy}":"Dates not configured";
  IEnumerable<WorkItem> AllLoaded=>items.Concat(previousItems).Concat(related).DistinctBy(w=>w.Id);
  string[] TagSuggestions=>AllLoaded.Concat(tagHistory).SelectMany(w=>w.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
- List<WorkItem> SelectedItems=>AllLoaded.Where(w=>selected.Contains(w.Id)).ToList();
+ List<WorkItem> SelectedItems=>Visible.Where(w=>selected.Contains(w.Id)).ToList();
  string[] WorkspaceColumns=>prefs.Columns;
  IEnumerable<string> CommonStates {get {var sets=SelectedItems.Select(w=>meta!.Types.First(t=>t.Name==w.Type).States.Select(s=>s.Name).ToHashSet()).ToArray();if(sets.Length==0)return [];var common=sets[0];foreach(var set in sets.Skip(1))common.IntersectWith(set);return common.Order();}}
  string[] Issues(WorkItem w)=>Quality.Issues(w,meta!,prefs,AllLoaded,meta!.Iterations.FirstOrDefault(i=>i.Path==w.Iteration));
@@ -52,7 +52,7 @@ public partial class Home {
  List<WorkItem> Visible {get{
   IEnumerable<WorkItem> rows=(quickView=="Carry-over"||cleanupFilter=="Previous-sprint unfinished")?previousItems.Where(w=>!Quality.Finished(w,meta!)):items;
   if(meta is null)return [];
-  rows=rows.Where(w=>(search==""||w.Id.ToString().Contains(search)||w.Title.Contains(search,StringComparison.OrdinalIgnoreCase)||w.Tags.Any(t=>t.Contains(search,StringComparison.OrdinalIgnoreCase)))&&(ownerFilters.Count==0||ownerFilters.Contains(w.OwnerId))&&(stateFilter==""||w.State.Contains(stateFilter,StringComparison.OrdinalIgnoreCase))&&(typeFilter==""||w.Type.Contains(typeFilter,StringComparison.OrdinalIgnoreCase))&&(tagFilter==""||w.Tags.Any(t=>t.Contains(tagFilter,StringComparison.OrdinalIgnoreCase)))&&(cleanupTagFilters.Count==0||w.Tags.Any(t=>cleanupTagFilters.Contains(t)))&&(areaFilter==""||w.Area.Contains(areaFilter,StringComparison.OrdinalIgnoreCase))&&(priorityFilter==""||w.Priority?.ToString().Contains(priorityFilter)==true));
+  rows=rows.Where(w=>(search==""||w.Id.ToString().Contains(search)||w.Title.Contains(search,StringComparison.OrdinalIgnoreCase)||w.Tags.Any(t=>t.Contains(search,StringComparison.OrdinalIgnoreCase)))&&(ownerFilters.Count==0||ownerFilters.Contains(w.OwnerId))&&(stateFilter==""||w.State.Contains(stateFilter,StringComparison.OrdinalIgnoreCase))&&(typeFilter==""||w.Type.Contains(typeFilter,StringComparison.OrdinalIgnoreCase))&&(applicationFilter==""||w.Tags.Any(t=>t.Equals(applicationFilter,StringComparison.OrdinalIgnoreCase)))&&(tagFilter==""||w.Tags.Any(t=>t.Contains(tagFilter,StringComparison.OrdinalIgnoreCase)))&&(!workspaceActiveOnly||!Quality.Finished(w,meta))&&(!workspaceBlockedOnly||Blocked(w))&&(cleanupTagFilters.Count==0||w.Tags.Any(t=>cleanupTagFilters.Contains(t)))&&(areaFilter==""||w.Area.Contains(areaFilter,StringComparison.OrdinalIgnoreCase))&&(priorityFilter==""||w.Priority?.ToString().Contains(priorityFilter)==true));
   rows=quickView switch{"My Work"=>rows.Where(w=>w.OwnerId==meta.Me.Id),"Unassigned"=>rows.Where(w=>w.OwnerId==""),"Bugs"=>rows.Where(w=>w.Type.Equals("Bug",StringComparison.OrdinalIgnoreCase)),"Recently Changed"=>rows.Where(w=>w.Changed>DateTimeOffset.UtcNow.AddDays(-3)),_=>rows};
   rows=attentionFilter switch{"blocked"=>rows.Where(Blocked),"unassigned"=>rows.Where(w=>w.OwnerId==""),"missing-app"=>rows.Where(w=>!HasApplicationTag(w)),"missing-estimate"=>rows.Where(w=>Planning.Estimate(w,PlanningPrefs) is null),"stale"=>rows.Where(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),_=>rows};
   if(screen=="cleanup"&&cleanupFilter!=""&&cleanupFilter!="Previous-sprint unfinished")rows=rows.Where(w=>Issues(w).Contains(cleanupFilter));
@@ -93,7 +93,7 @@ public partial class Home {
  async Task ChooseSprint(Iteration iteration){if(busy.Count>0||applying)return;sprintIndex=Array.IndexOf(meta!.Iterations,iteration);selected.Clear();detail=null;CloseDialog();await LoadSprint();}
  async Task Refresh(){if(screen=="planning"&&planner is not null){await planner.RefreshPlanning();return;}if(busy.Count>0||applying)return;sprintCache.Clear();capacityByIteration.Clear();await LoadSprint(true);await LoadFutureCapacities(lifetime.Token);await LoadPlanningItems(lifetime.Token);await LoadCalendarHolidays(lifetime.Token);if(detail is not null)await OpenById(detail.Id);}
  async Task SetQuickView(string view){quickView=view;cleanupFilter="";if(view=="Carry-over"){loading=true;try{await LoadPrevious(refreshToken.Token);}catch(Exception e){Error(e);}finally{loading=false;}}}
- void ClearFilters(){search=ownerSearch=stateFilter=typeFilter=tagFilter=areaFilter=priorityFilter=cleanupFilter=attentionFilter=filterOptionSearch="";ownerFilters.Clear();cleanupTagFilters.Clear();quickView="Team";}
+ void ClearFilters(){search=ownerSearch=stateFilter=typeFilter=tagFilter=applicationFilter=areaFilter=priorityFilter=cleanupFilter=attentionFilter=filterOptionSearch="";workspaceActiveOnly=workspaceBlockedOnly=false;ownerFilters.Clear();cleanupTagFilters.Clear();quickView="Team";}
  void ToggleOwner(string id){if(!ownerFilters.Add(id))ownerFilters.Remove(id);}
  void ToggleCleanupTag(string tag){if(!cleanupTagFilters.Add(tag))cleanupTagFilters.Remove(tag);}
  void SelectVisibleAndMoveNext(){selected.Clear();foreach(var w in Visible)selected.Add(w.Id);StartBulk("Next");}
@@ -250,16 +250,18 @@ public partial class Home {
  InitiativeMetadata Initiative(string tag){var key=prefs.InitiativeMetadata.Keys.FirstOrDefault(k=>k.Equals(tag,StringComparison.OrdinalIgnoreCase));if(key is not null)return prefs.InitiativeMetadata[key];var value=new InitiativeMetadata();prefs.InitiativeMetadata[tag]=value;return value;}
  List<InitiativeRow> InitiativeRows(){var today=DateOnly.FromDateTime(DateTime.Now);return Remaining(TagDimension.Initiative).Select(g=>{var m=Initiative(g.Name);var attention=m.Status is "At Risk" or "Blocked"||m.Confidence=="Low"||(m.DueDate is {} due&&due<=today.AddDays(14));return new InitiativeRow(g.Name,g.Count,g.Effort,m,attention);}).OrderByDescending(x=>x.NeedsAttention).ThenBy(x=>x.Meta.DueDate??DateOnly.MaxValue).ThenBy(x=>x.Tag).ToList();}
  IEnumerable<(string Id,string Name,int Count)> FilterPeople=>items.GroupBy(w=>w.OwnerId).Select(g=>(Id:g.Key,Name:PersonName(g.Key),Count:g.Count())).Where(x=>filterOptionSearch==""||x.Name.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Name=="Unassigned").ThenBy(x=>x.Name);
- IEnumerable<(string Name,int Count)> FilterStates=>items.GroupBy(w=>w.State,StringComparer.OrdinalIgnoreCase).Select(g=>(Name:g.Key,Count:g.Count())).Where(x=>filterOptionSearch==""||x.Name.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Name);
- IEnumerable<(string Tag,int Count)> FilterTags=>items.SelectMany(w=>w.Tags).GroupBy(t=>t,StringComparer.OrdinalIgnoreCase).Select(g=>(Tag:g.Key,Count:g.Count())).Where(x=>filterOptionSearch==""||x.Tag.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Tag);
+ IEnumerable<(string Tag,int Count)> FilterApplications=>ApplicationTags().Select(tag=>(Tag:tag,Count:items.Count(w=>w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)))).Where(x=>x.Count>0&&(filterOptionSearch==""||x.Tag.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase))).OrderBy(x=>x.Tag);
+ IEnumerable<(string Tag,int Count)> FilterTags {get{var applications=ApplicationTags().ToHashSet(StringComparer.OrdinalIgnoreCase);var blocked=prefs.BlockedTags.ToHashSet(StringComparer.OrdinalIgnoreCase);return items.SelectMany(w=>w.Tags).Where(t=>!applications.Contains(t)&&!blocked.Contains(t)).GroupBy(t=>t,StringComparer.OrdinalIgnoreCase).Select(g=>(Tag:g.Key,Count:g.Count())).Where(x=>filterOptionSearch==""||x.Tag.Contains(filterOptionSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Tag).ToArray();}}
  string[] KnownPlanningTags=>planningItems.Concat(tagHistory).SelectMany(w=>w.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
  string DisplayTitle(WorkItem w){var title=w.Title.Trim();foreach(var tag in w.Tags.OrderByDescending(t=>t.Length)){if(!title.StartsWith(tag,StringComparison.OrdinalIgnoreCase)||title.Length==tag.Length)continue;var tail=title[tag.Length..];if(tail.Length>0&&(char.IsWhiteSpace(tail[0])||"-–—:|/".Contains(tail[0]))){tail=tail.TrimStart(' ','-','–','—',':','|','/');if(tail.Length>0)return tail;}}return title;}
- void ToggleStatePill(string value)=>stateFilter=stateFilter.Equals(value,StringComparison.OrdinalIgnoreCase)?"":value;
+ void ToggleApplicationPill(string value)=>applicationFilter=applicationFilter.Equals(value,StringComparison.OrdinalIgnoreCase)?"":value;
  void ToggleTagPill(string value)=>tagFilter=tagFilter.Equals(value,StringComparison.OrdinalIgnoreCase)?"":value;
+ void ToggleWorkspaceActiveOnly()=>workspaceActiveOnly=!workspaceActiveOnly;
+ void ToggleWorkspaceBlockedOnly()=>workspaceBlockedOnly=!workspaceBlockedOnly;
  void OpenAttention(string key){ClearFilters();attentionFilter=key;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
  void OpenPerson(string id){ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="List";sort="Order";descending=false;detail=null;dailyPanelItem=null;}
  async Task OpenSprintPerson(Iteration iteration,string id){if(meta is null)return;var index=Array.IndexOf(meta.Iterations,iteration);if(index<0)return;sprintIndex=index;ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="List";sort="Order";descending=false;detail=null;dailyPanelItem=null;await LoadSprint();}
- void OpenGroup(string tag){ClearFilters();tagFilter=tag;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
+ void OpenGroup(string tag){ClearFilters();if(ApplicationTags().Contains(tag,StringComparer.OrdinalIgnoreCase))applicationFilter=tag;else tagFilter=tag;screen="workspace";workspaceMode="List";detail=null;dailyPanelItem=null;}
  string DefaultMeetingType()=>meta?.Types.FirstOrDefault(t=>t.Name is "Product Backlog Item" or "User Story")?.Name??meta?.Types.FirstOrDefault()?.Name??"";
  void EnsureMeetingDefaults(){if(meetingWorkType=="")meetingWorkType=DefaultMeetingType();if(meetingTitle=="")meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";}
  void ResetMeeting(){meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";meetingNotes=meetingCopilotText=meetingError="";meetingImport=new();meetingActions=[];meetingWorkType=DefaultMeetingType();}
@@ -393,8 +395,7 @@ __MEETING_NOTES__
 
  async Task PrepareSmartFix(){
   try{
-   if(selected.Count==0)throw new TrackerException("Select work items first.");
-   if(SelectedItems.Count!=selected.Count)throw new TrackerException("Some selected items are no longer loaded. Clear selection and select again.");
+   if(SelectedItems.Count==0)throw new TrackerException("Select visible work items first.");
    if(SelectedItems.Any(w=>busy.Contains(w.Id)||drafts.ContainsKey(w.Id)))throw new TrackerException("Wait for saves and apply or discard local drafts before using Smart Fix.");
    var apps=ApplicationTags();
    var canSuggestTags=KnownPlanningTags.Length>0;
@@ -485,8 +486,8 @@ __WORK_ITEMS__
    results=[];dialog="review";dialogError="";
   }catch(Exception e){Error(e);}
  }
- void StartBulk(string kind){if(selected.Count==0){Notify("Select work items first.");return;}bulkKind=kind;bulkValue=kind switch{"Next"=>meta?.Iterations.ElementAtOrDefault(sprintIndex+1)?.Path??"","Previous"=>meta?.Iterations.ElementAtOrDefault(sprintIndex-1)?.Path??"",_=>""};_=Show("bulk");}
- void PreviewBulk(){try{if(bulkKind=="State"&&!CommonStates.Contains(bulkValue))throw new TrackerException("Choose a state supported by all selected work-item types.");if(SelectedItems.Count!=selected.Count)throw new TrackerException("Some selected items are no longer loaded. Clear selection and select again.");if(SelectedItems.Any(w=>busy.Contains(w.Id)||drafts.ContainsKey(w.Id)))throw new TrackerException("Wait for saves and apply or discard local drafts before bulk editing.");
+ void StartBulk(string kind){if(SelectedItems.Count==0){Notify("Select visible work items first.");return;}bulkKind=kind;bulkValue=kind switch{"Next"=>meta?.Iterations.ElementAtOrDefault(sprintIndex+1)?.Path??"","Previous"=>meta?.Iterations.ElementAtOrDefault(sprintIndex-1)?.Path??"",_=>""};_=Show("bulk");}
+ void PreviewBulk(){try{if(SelectedItems.Count==0)throw new TrackerException("Select visible work items first.");if(bulkKind=="State"&&!CommonStates.Contains(bulkValue))throw new TrackerException("Choose a state supported by all selected work-item types.");if(SelectedItems.Any(w=>busy.Contains(w.Id)||drafts.ContainsKey(w.Id)))throw new TrackerException("Wait for saves and apply or discard local drafts before bulk editing.");
   if(bulkValue==""&&bulkKind!="Owner")throw new TrackerException("Choose a value first.");if(bulkKind=="Priority"&&(!int.TryParse(bulkValue,out var p)||p<1||p>4))throw new TrackerException("Priority must be 1–4.");
   pending=SelectedItems.Select(w=>{Change c;if(bulkKind is "AddTag" or "RemoveTag"){var tags=w.Tags.ToList();if(bulkKind=="AddTag")tags.Add(bulkValue.Trim());else tags.RemoveAll(t=>t.Equals(bulkValue.Trim(),StringComparison.OrdinalIgnoreCase));c=new(ItemField.Tags,string.Join("; ",tags.Distinct(StringComparer.OrdinalIgnoreCase)));}else{var f=bulkKind is "Next" or "Previous"?ItemField.Iteration:Enum.Parse<ItemField>(bulkKind);c=new(f,bulkKind=="Priority"?int.Parse(bulkValue):bulkValue);}return new ItemUpdate(w,[c]);}).ToList();results=[];dialog="review";dialogError="";
  }catch(Exception e){Error(e);}}
@@ -511,9 +512,9 @@ __WORK_ITEMS__
   if(newAcceptance!=""){if(meta!.Types.First(t=>t.Name==newType).Fields.Contains("Microsoft.VSTS.Common.AcceptanceCriteria"))changes.Add(new(ItemField.Acceptance,ContentText.HtmlEncode(newAcceptance)));else{changes.RemoveAll(c=>c.Field==ItemField.Description);changes.Add(new(ItemField.Description,ContentText.HtmlEncode(newDescription+"\n\nACCEPTANCE CRITERIA:\n"+newAcceptance)));}}var w=await Tracker.CreateAsync(newType,changes,newParent,lifetime.Token);if(w.Iteration==CurrentSprint?.Path)items.Add(w);sprintCache.Clear();detail=w;dialog="";Notify($"Created #{w.Id}.");
  }catch(Exception e){Error(e);}finally{applying=false;}}
  async Task ToggleColumn(string c){prefs.Columns=prefs.Columns.Contains(c)?prefs.Columns.Where(x=>x!=c).ToArray():AllColumns.Where(x=>prefs.Columns.Contains(x)||x==c).ToArray();await SaveSettings();}
- Dictionary<string,string> Filters()=>new(){["search"]=search,["owners"]=string.Join('|',ownerFilters),["state"]=stateFilter,["type"]=typeFilter,["tag"]=tagFilter,["area"]=areaFilter,["priority"]=priorityFilter,["quick"]=quickView,["sort"]=sort,["descending"]=descending.ToString()};
+ Dictionary<string,string> Filters()=>new(){["search"]=search,["owners"]=string.Join('|',ownerFilters),["state"]=stateFilter,["type"]=typeFilter,["application"]=applicationFilter,["tag"]=tagFilter,["activeOnly"]=workspaceActiveOnly.ToString(),["blockedOnly"]=workspaceBlockedOnly.ToString(),["area"]=areaFilter,["priority"]=priorityFilter,["quick"]=quickView,["sort"]=sort,["descending"]=descending.ToString()};
  async Task SaveView(){if(string.IsNullOrWhiteSpace(viewName)){dialogError="Enter a view name.";return;}prefs.Views.RemoveAll(v=>v.Name.Equals(viewName.Trim(),StringComparison.OrdinalIgnoreCase));prefs.Views.Add(new(viewName.Trim(),Filters(),prefs.Columns.ToArray()));await SaveSettings();CloseDialog();viewName="";}
- async Task LoadView(SavedView v){var f=v.Filters;search=f.GetValueOrDefault("search","");ownerFilters.Clear();foreach(var id in f.GetValueOrDefault("owners",f.GetValueOrDefault("owner","")).Split('|',StringSplitOptions.RemoveEmptyEntries))ownerFilters.Add(id);stateFilter=f.GetValueOrDefault("state","");typeFilter=f.GetValueOrDefault("type","");tagFilter=f.GetValueOrDefault("tag","");areaFilter=f.GetValueOrDefault("area","");priorityFilter=f.GetValueOrDefault("priority","");sort=f.GetValueOrDefault("sort","Order");descending=f.GetValueOrDefault("descending")=="True";prefs.Columns=v.Columns;screen="workspace";await SetQuickView(f.GetValueOrDefault("quick","Team"));}
+ async Task LoadView(SavedView v){var f=v.Filters;search=f.GetValueOrDefault("search","");ownerFilters.Clear();foreach(var id in f.GetValueOrDefault("owners",f.GetValueOrDefault("owner","")).Split('|',StringSplitOptions.RemoveEmptyEntries))ownerFilters.Add(id);stateFilter=f.GetValueOrDefault("state","");typeFilter=f.GetValueOrDefault("type","");applicationFilter=f.GetValueOrDefault("application","");tagFilter=f.GetValueOrDefault("tag","");workspaceActiveOnly=f.GetValueOrDefault("activeOnly")=="True";workspaceBlockedOnly=f.GetValueOrDefault("blockedOnly")=="True";areaFilter=f.GetValueOrDefault("area","");priorityFilter=f.GetValueOrDefault("priority","");sort=f.GetValueOrDefault("sort","Order");descending=f.GetValueOrDefault("descending")=="True";prefs.Columns=v.Columns;screen="workspace";await SetQuickView(f.GetValueOrDefault("quick","Team"));}
  async Task DeleteView(SavedView v){prefs.Views.Remove(v);await SaveSettings();}
  async Task SaveSettings(){try{prefs.BlockedTags=blockedTagsText.Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();await Preferences.SaveAsync(prefs,lifetime.Token);await ApplyTheme();Notify("Settings saved.");}catch(Exception e){Error(e);}}
  void LoadTemplate(){if(prefs.Templates.ElementAtOrDefault(templateIndex)is not {} t)return;templateName=t.Name;templateDescription=t.Description;templateAcceptance=t.Acceptance;templateTags=t.Tags;templateArea=t.Area;}
