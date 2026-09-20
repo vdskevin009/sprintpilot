@@ -602,6 +602,7 @@ __CONTEXT__
  void ReviewMagicOrchestration(){
   try{
    if(meta is null)throw new TrackerException("Reload SprintPilot first.");
+   if(magicSuggestions.Any(s=>s.Decision=="pending"))throw new TrackerException("Accept or ignore every orchestration recommendation before continuing.");
    var accepted=magicSuggestions.Where(s=>s.Decision=="accepted").ToArray();if(accepted.Length==0)throw new TrackerException("Accept at least one reassignment before continuing.");
    pending=[];
    foreach(var suggestion in accepted){
