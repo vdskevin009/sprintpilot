@@ -245,6 +245,7 @@ public partial class Home {
  sealed class SmartFixSuggestion {public int Id {get;set;}public string ApplicationTag {get;set;}="";public double? Estimate {get;set;}public string[] AddTags {get;set;}=[];public string Reason {get;set;}="";public bool ApplyApplication {get;set;}public bool ApplyEstimate {get;set;}public bool ApplyTags {get;set;}}
  sealed record MagicCandidate(string PersonId,string UniqueName,string Name,double CurrentEffort,double CapacityHours,int CurrentPercent,int ProjectedPercent,int SameApplicationItems,DateRange? NextLeave);
  sealed record MagicContext(WorkItem Item,string CurrentOwnerId,string CurrentOwnerName,double Estimate,int CurrentPercent,int SourceProjectedPercent,MagicCandidate[] Candidates);
+ sealed record MagicProjectionRow(string Id,string Name,int Before,int After);
  sealed class MagicImport {public List<MagicSuggestionInput> Suggestions {get;set;}=[];}
  sealed class MagicSuggestionInput {public int Id {get;set;}public string SuggestedOwnerId {get;set;}="";public string Reason {get;set;}="";public string Confidence {get;set;}="";}
  sealed class MagicSuggestion {public int Id {get;set;}public string SuggestedOwnerId {get;set;}="";public string Reason {get;set;}="";public string Confidence {get;set;}="Medium";public string Decision {get;set;}="pending";}
@@ -494,6 +495,121 @@ __WORK_ITEMS__
     if(changes.Count>0)pending.Add(new(original,changes));
    }
    if(pending.Count==0)throw new TrackerException("Choose at least one Smart Fix suggestion before continuing.");
+   results=[];dialog="review";dialogError="";
+  }catch(Exception e){Error(e);}
+ }
+
+ int MagicPercent(string personId,double effort){var capacity=PlannedCapacityHours(personId,CurrentSprint);return capacity<=0?(effort>0?999:0):(int)Math.Round(100d*effort/capacity);}
+ string[] ItemApplications(WorkItem item)=>ApplicationTags().Where(tag=>item.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)).ToArray();
+ List<MagicContext> BuildMagicContexts(){
+  if(meta is null||CurrentSprint is null)return [];
+  var current=items.Where(w=>!Quality.Finished(w,meta)&&Planning.IsPlanningType(w.Type,PlanningPrefs)&&w.Iteration.Equals(CurrentSprint.Path,StringComparison.OrdinalIgnoreCase)).ToArray();
+  var effortByOwner=meta.People.ToDictionary(p=>p.Id,p=>current.Where(w=>w.OwnerId==p.Id).Sum(w=>Planning.Estimate(w,PlanningPrefs)??0),StringComparer.OrdinalIgnoreCase);
+  var missingByOwner=meta.People.ToDictionary(p=>p.Id,p=>current.Count(w=>w.OwnerId==p.Id&&Planning.Estimate(w,PlanningPrefs) is null),StringComparer.OrdinalIgnoreCase);
+  var contexts=new List<MagicContext>();
+  foreach(var item in current.Where(w=>w.OwnerId!=""&&!Blocked(w))){
+   var estimate=Planning.Estimate(item,PlanningPrefs);if(estimate is null or <=0)continue;
+   var source=meta.People.FirstOrDefault(p=>p.Id==item.OwnerId);if(source is null||missingByOwner.GetValueOrDefault(source.Id)>0)continue;
+   var sourceEffort=effortByOwner.GetValueOrDefault(source.Id);var sourcePercent=MagicPercent(source.Id,sourceEffort);if(sourcePercent<85)continue;
+   var applications=ItemApplications(item);
+   var candidates=meta.People.Where(p=>p.Id!=source.Id&&!OffToday(p.Id)&&missingByOwner.GetValueOrDefault(p.Id)==0).Select(p=>{
+    var currentEffort=effortByOwner.GetValueOrDefault(p.Id);var capacity=PlannedCapacityHours(p.Id,CurrentSprint);var currentPercent=MagicPercent(p.Id,currentEffort);var projected=MagicPercent(p.Id,currentEffort+estimate.Value);
+    var sameApplication=applications.Length==0?0:current.Count(w=>w.OwnerId==p.Id&&applications.Any(a=>w.Tags.Contains(a,StringComparer.OrdinalIgnoreCase)));
+    return new MagicCandidate(p.Id,p.UniqueName,p.Name,currentEffort,capacity,currentPercent,projected,sameApplication,NextDaysOff(p.Id,CurrentSprint));
+   }).Where(candidate=>candidate.CapacityHours>0&&candidate.CurrentPercent+10<=sourcePercent&&candidate.ProjectedPercent<sourcePercent)
+     .OrderByDescending(candidate=>candidate.SameApplicationItems).ThenBy(candidate=>candidate.ProjectedPercent).ThenBy(candidate=>candidate.Name).Take(4).ToArray();
+   if(candidates.Length==0)continue;
+   contexts.Add(new(item,source.Id,source.Name,estimate.Value,sourcePercent,MagicPercent(source.Id,Math.Max(0,sourceEffort-estimate.Value)),candidates));
+  }
+  return contexts.OrderByDescending(x=>x.CurrentPercent).ThenByDescending(x=>x.Estimate).Take(24).ToList();
+ }
+ string MagicLeaveText(DateRange? leave)=>leave is null?"none":RangeText(leave);
+ string BuildMagicPrompt(){
+  var details=string.Join("\n\n",magicContexts.Select(context=>{
+   var applications=ItemApplications(context.Item);
+   var candidates=string.Join("\n",context.Candidates.Select(candidate=>$"- candidateId={candidate.PersonId}; name={candidate.Name}; load={candidate.CurrentPercent}% -> {candidate.ProjectedPercent}%; sameApplicationItems={candidate.SameApplicationItems}; nextOff={MagicLeaveText(candidate.NextLeave)}"));
+   return $"WORK ITEM #{context.Item.Id}\nTitle: {context.Item.Title}\nCurrent owner: {context.CurrentOwnerName} ({context.CurrentOwnerId})\nCurrent owner load: {context.CurrentPercent}% -> {context.SourceProjectedPercent}% if moved\nEstimate: {context.Estimate:0.##}h\nApplications: {(applications.Length==0?"(none classified)":string.Join(", ",applications))}\nTags: {(context.Item.Tags.Length==0?"(none)":string.Join("; ",context.Item.Tags))}\nDescription: {ClipSmartFixText(context.Item.Description,1400)}\nAcceptance/testing: {ClipSmartFixText(context.Item.Acceptance,800)}\nAllowed candidates:\n{candidates}";
+  }));
+  return """
+You are helping orchestrate a software delivery sprint. Recommend only useful work-item reassignments that improve workload balance while preserving context.
+
+Important constraints:
+- SprintPilot already filtered out Done, blocked, unestimated and unsafe candidate combinations.
+- You may ONLY recommend a work item listed below and ONLY one of its exact allowed candidateId values.
+- Do not infer performance, seniority, competence, personality, availability, or productivity beyond the supplied facts.
+- Treat same-application work as continuity/context, not proof of skill.
+- Prefer moves that reduce an overloaded or nearly-full current owner and keep the recipient at a reasonable projected load, ideally <=100%.
+- Consider known upcoming time off when choosing between otherwise similar candidates.
+- Do not recommend movement merely to make percentages look equal. If there is no meaningful operational benefit, omit the item.
+- Give a concise factual reason grounded in capacity, application continuity, or time-off data.
+- Confidence must be High, Medium, or Low.
+- Return raw JSON only, without Markdown fences.
+
+Required JSON shape:
+{
+  "suggestions": [
+    {
+      "id": 123,
+      "suggestedOwnerId": "exact-candidate-id",
+      "reason": "Why this reassignment helps orchestration",
+      "confidence": "High"
+    }
+  ]
+}
+
+ORCHESTRATION CONTEXT
+__CONTEXT__
+""".Replace("__CONTEXT__",details);
+ }
+ async Task PrepareMagicOrchestration(){
+  try{
+   if(meta is null||CurrentSprint is null)throw new TrackerException("Load a current sprint first.");
+   if(!PlanningPrefs.EstimatesAreHours)throw new TrackerException("Enable 'Treat configured estimates as hours' in Settings before running Magic Orchestration.");
+   magicContexts=BuildMagicContexts();magicSuggestions=[];magicCopilotText="";
+   if(magicContexts.Count==0){Notify("No safe reassignment candidates were found. Complete active estimates/capacity first, or the sprint may already be balanced.");return;}
+   magicPrompt=BuildMagicPrompt();await Show("magic");
+  }catch(Exception e){Error(e);}
+ }
+ async Task CopyMagicPrompt(){try{if(string.IsNullOrWhiteSpace(magicPrompt))throw new TrackerException("Prepare Magic Orchestration first.");await JS.InvokeVoidAsync("sprintPilot.copy",magicPrompt);Notify($"Copied orchestration prompt for {magicContexts.Count} candidate work item(s).");}catch(Exception e){Error(e);}}
+ void ParseMagicCopilot(){
+  try{
+   var parsed=JsonSerializer.Deserialize<MagicImport>(StripCodeFence(magicCopilotText),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})??throw new JsonException();
+   var duplicates=parsed.Suggestions.GroupBy(x=>x.Id).Where(g=>g.Count()>1).Select(g=>g.Key).ToArray();if(duplicates.Length>0)throw new TrackerException("Copilot returned duplicate work-item IDs: "+string.Join(", ",duplicates));
+   var contexts=magicContexts.ToDictionary(x=>x.Item.Id);var suggestions=new List<MagicSuggestion>();
+   foreach(var input in parsed.Suggestions){
+    if(!contexts.TryGetValue(input.Id,out var context))throw new TrackerException($"Copilot returned #{input.Id}, which was not part of this orchestration analysis.");
+    var ownerId=(input.SuggestedOwnerId??"").Trim();var target=context.Candidates.FirstOrDefault(c=>c.PersonId.Equals(ownerId,StringComparison.OrdinalIgnoreCase));
+    if(target is null)throw new TrackerException($"#{input.Id}: suggested owner is not one of SprintPilot's allowed candidates.");
+    var confidence=(input.Confidence??"").Trim();confidence=confidence.Equals("High",StringComparison.OrdinalIgnoreCase)?"High":confidence.Equals("Low",StringComparison.OrdinalIgnoreCase)?"Low":"Medium";
+    suggestions.Add(new(){Id=input.Id,SuggestedOwnerId=target.PersonId,Reason=(input.Reason??"").Trim(),Confidence=confidence,Decision="pending"});
+   }
+   magicSuggestions=suggestions;dialogError=magicSuggestions.Count==0?"Copilot did not recommend any reassignment. That is a valid orchestration result.":"";
+  }catch(Exception e){magicSuggestions=[];Error(e);}
+ }
+ MagicContext MagicContextFor(int id)=>magicContexts.First(x=>x.Item.Id==id);
+ MagicCandidate MagicTarget(MagicSuggestion suggestion)=>MagicContextFor(suggestion.Id).Candidates.First(x=>x.PersonId.Equals(suggestion.SuggestedOwnerId,StringComparison.OrdinalIgnoreCase));
+ void DecideMagic(MagicSuggestion suggestion,string decision)=>suggestion.Decision=decision;
+ List<MagicProjectionRow> MagicProjection(){
+  if(meta is null||CurrentSprint is null)return [];
+  var current=items.Where(w=>!Quality.Finished(w,meta)&&Planning.IsPlanningType(w.Type,PlanningPrefs)&&w.Iteration.Equals(CurrentSprint.Path,StringComparison.OrdinalIgnoreCase)).ToArray();
+  var effort=meta.People.ToDictionary(p=>p.Id,p=>current.Where(w=>w.OwnerId==p.Id).Sum(w=>Planning.Estimate(w,PlanningPrefs)??0),StringComparer.OrdinalIgnoreCase);
+  var before=effort.ToDictionary(kv=>kv.Key,kv=>MagicPercent(kv.Key,kv.Value),StringComparer.OrdinalIgnoreCase);var changed=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+  foreach(var suggestion in magicSuggestions.Where(s=>s.Decision=="accepted")){
+   var context=MagicContextFor(suggestion.Id);effort[context.CurrentOwnerId]=Math.Max(0,effort.GetValueOrDefault(context.CurrentOwnerId)-context.Estimate);effort[suggestion.SuggestedOwnerId]=effort.GetValueOrDefault(suggestion.SuggestedOwnerId)+context.Estimate;changed.Add(context.CurrentOwnerId);changed.Add(suggestion.SuggestedOwnerId);
+  }
+  return meta.People.Where(p=>changed.Contains(p.Id)).Select(p=>new MagicProjectionRow(p.Id,p.Name,before.GetValueOrDefault(p.Id),MagicPercent(p.Id,effort.GetValueOrDefault(p.Id)))).OrderByDescending(x=>x.Before).ThenBy(x=>x.Name).ToList();
+ }
+ void ReviewMagicOrchestration(){
+  try{
+   if(meta is null)throw new TrackerException("Reload SprintPilot first.");
+   var accepted=magicSuggestions.Where(s=>s.Decision=="accepted").ToArray();if(accepted.Length==0)throw new TrackerException("Accept at least one reassignment before continuing.");
+   pending=[];
+   foreach(var suggestion in accepted){
+    var context=MagicContextFor(suggestion.Id);var target=MagicTarget(suggestion);var original=items.FirstOrDefault(w=>w.Id==suggestion.Id)??throw new TrackerException($"#{suggestion.Id} is no longer in the current sprint.");
+    if(Quality.Finished(original,meta))throw new TrackerException($"#{suggestion.Id} is already completed and will not be reassigned.");
+    if(!original.OwnerId.Equals(context.CurrentOwnerId,StringComparison.OrdinalIgnoreCase))throw new TrackerException($"#{suggestion.Id} changed owner since the orchestration analysis. Run Magic Orchestration again.");
+    pending.Add(new(original,[new Change(ItemField.Owner,target.UniqueName)]));
+   }
    results=[];dialog="review";dialogError="";
   }catch(Exception e){Error(e);}
  }
