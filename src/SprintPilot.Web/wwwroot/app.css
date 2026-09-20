@@ -707,7 +707,7 @@ html[data-theme=avd] .home-card:hover{
 }
 
 html[data-theme=avd] .scrim{
-  background:#07111bd9;
+  background:#07111b;
   backdrop-filter:none!important;
 }
 
@@ -764,6 +764,19 @@ html[data-theme=avd] .blocked-filter.active{
   color:#ffd28c!important;
   border-color:#c58a2f!important;
   background:#3a2d18!important;
+}
+
+html[data-theme=avd] .grid-wrap tbody tr.blocked:not(.finished){
+  background:#33291a!important;
+  box-shadow:inset 4px 0 #c58a2f!important;
+}
+
+html[data-theme=avd] .grid-wrap tbody tr.blocked:not(.finished):hover{
+  background:#3d301c!important;
+}
+
+html[data-theme=avd] .primary:hover{
+  filter:none!important;
 }
 
 html[data-theme=avd] .magic-confidence.high,
