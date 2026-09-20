@@ -650,3 +650,181 @@ button.primary{font-weight:600}
  .magic-decision{justify-content:stretch}
  .magic-decision button{flex:1}
 }
+
+
+/* AVD-friendly theme: solid, high-contrast surfaces designed to survive RDP/AVD compression. */
+:root[data-theme=avd]{
+  color-scheme:dark;
+  --bg:#101720;
+  --rail:#0b1118;
+  --surface:#18232f;
+  --hover:#223243;
+  --text:#f4f7fb;
+  --muted:#bdc8d5;
+  --border:#4b5f74;
+  --accent:#8eb8ff;
+  --accent-bg:#203b61;
+  --danger:#ff9696;
+  --success:#8be0bd;
+  --done-bg:#17372d;
+  --done-hover:#20483a;
+  --done-text:#a2e6cc;
+  --shadow:none;
+  background:var(--bg);
+  color:var(--text);
+}
+
+html[data-theme=avd] body{
+  background:var(--bg);
+}
+
+/* Avoid effects that become blocky or banded when the AVD stream is bandwidth-constrained. */
+html[data-theme=avd] *,
+html[data-theme=avd] *::before,
+html[data-theme=avd] *::after{
+  text-shadow:none!important;
+  transition:none!important;
+}
+
+html[data-theme=avd] .home-card,
+html[data-theme=avd] .meeting-card,
+html[data-theme=avd] .planning-config,
+html[data-theme=avd] .filter-shell,
+html[data-theme=avd] .person-column,
+html[data-theme=avd] .dialog,
+html[data-theme=avd] .detail-panel,
+html[data-theme=avd] .bulk-bar{
+  background:var(--surface)!important;
+  background-image:none!important;
+  box-shadow:none!important;
+  border-color:var(--border);
+}
+
+html[data-theme=avd] .home-card:hover{
+  transform:none!important;
+  box-shadow:none!important;
+  border-color:var(--accent);
+}
+
+html[data-theme=avd] .scrim{
+  background:#07111b;
+  backdrop-filter:none!important;
+}
+
+html[data-theme=avd] .magic-orchestration-trigger,
+html[data-theme=avd] .install-app-button.ready{
+  background:var(--accent-bg)!important;
+  background-image:none!important;
+  box-shadow:none!important;
+}
+
+html[data-theme=avd] .magic-orchestration-trigger:hover{
+  box-shadow:none!important;
+}
+
+html[data-theme=avd] .update-app-button{
+  background:#17372d!important;
+  border-color:#4f8f77!important;
+}
+
+html[data-theme=avd] .tag-chip{
+  background:#203b61!important;
+  color:#cfe0ff!important;
+  border-color:#5879a4!important;
+}
+
+html[data-theme=avd] .tag-suggestion{
+  background:var(--surface)!important;
+  color:var(--accent)!important;
+  border-color:#5879a4!important;
+}
+
+html[data-theme=avd] .planning-fill.initiative{
+  background:#66b8ae!important;
+}
+
+html[data-theme=avd] .planning-fill.unclassified{
+  background:#8392a3!important;
+  opacity:1!important;
+}
+
+html[data-theme=avd] .capacity-band{
+  background:#31584f!important;
+}
+
+html[data-theme=avd] .capacity-meter.over{
+  background:#3a2730!important;
+}
+
+html[data-theme=avd] .capacity-meter.near{
+  background:#3a3427!important;
+}
+
+html[data-theme=avd] .blocked-filter.active{
+  color:#ffd28c!important;
+  border-color:#c58a2f!important;
+  background:#3a2d18!important;
+}
+
+html[data-theme=avd] .grid-wrap tbody tr.blocked:not(.finished){
+  background:#33291a!important;
+  box-shadow:inset 4px 0 #c58a2f!important;
+}
+
+html[data-theme=avd] .grid-wrap tbody tr.blocked:not(.finished):hover{
+  background:#3d301c!important;
+}
+
+html[data-theme=avd] .primary:hover{
+  filter:none!important;
+}
+
+html[data-theme=avd] .magic-confidence.high,
+html[data-theme=avd] .magic-decision .accept.active{
+  background:#17372d!important;
+  border-color:#4f8f77!important;
+}
+
+html[data-theme=avd] .magic-confidence.medium{
+  background:#3a2d18!important;
+  border-color:#c58a2f!important;
+  color:#ffd28c!important;
+}
+
+html[data-theme=avd] .magic-suggestions article.ignored{
+  opacity:1!important;
+  color:var(--muted);
+}
+
+html[data-theme=avd] .sprint-capacity-card .capacity-meter i.capacity-overage{
+  box-shadow:none!important;
+}
+
+html[data-theme=avd] input,
+html[data-theme=avd] select,
+html[data-theme=avd] textarea,
+html[data-theme=avd] button{
+  border-color:var(--border);
+}
+
+html[data-theme=avd] :is(.nav-button.active,.view-tabs .active,.filter-pill.active,tr.selected){
+  background:var(--accent-bg)!important;
+}
+
+html[data-theme=avd] .item-description,
+html[data-theme=avd] .magic-impact,
+html[data-theme=avd] .magic-projection,
+html[data-theme=avd] .smart-fix-option{
+  background:var(--hover)!important;
+}
+
+/* Keep edges explicit: subtle 1px alpha borders are easy to lose after remote compression. */
+html[data-theme=avd] .home-card,
+html[data-theme=avd] .person-column,
+html[data-theme=avd] .planning-config,
+html[data-theme=avd] .dialog,
+html[data-theme=avd] .detail-panel,
+html[data-theme=avd] .grid-wrap{
+  border-width:1px;
+  border-style:solid;
+}
