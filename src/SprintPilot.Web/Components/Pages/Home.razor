@@ -25,7 +25,7 @@
 @if(initializing){<div class="empty"><h1>Opening SprintPilot…</h1></div>}
 else if(screen=="settings"){
 <section class="settings"><div class="page-heading"><div><h1>Settings</h1><p>Make SprintPilot work the way you do.</p></div><button class="primary" @onclick="SaveSettings">Save settings</button></div>
-<h2>Appearance</h2><label>Theme<select @bind="prefs.Theme" @bind:after="ApplyTheme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option><option value="avd">AVD friendly</option></select><small>AVD friendly uses solid surfaces, stronger contrast, and minimal visual effects to reduce remote-desktop compression artifacts.</small></label>
+<h2>Appearance</h2><label>Theme<select @bind="prefs.Theme" @bind:after="ApplyTheme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option><option value="avd">AVD friendly</option></select><small>AVD friendly uses light solid surfaces, stronger borders, and minimal visual effects to reduce remote-desktop compression artifacts.</small></label>
 <h2>Connection</h2><p>@(connection?.Organization??"No organization") / @(connection?.Project??"No project")</p><button @onclick="ChangeConnection">Change connection</button>
 @if(meta is not null&&!Tracker.Demo){<label>Team<select value="@connection?.Team" @onchange="ChangeTeam">@foreach(var t in meta.Teams){<option value="@t.Id">@t.Name</option>}</select></label>}
 <h2>Blocked work</h2><p>Work items with any of these Azure DevOps tags are shown as Blocked everywhere in SprintPilot.</p><label>Blocked tags (one per line)<textarea rows="5" @bind="blockedTagsText"></textarea></label>
