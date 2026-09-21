@@ -834,3 +834,42 @@ html[data-theme=avd] .grid-wrap{
   border-width:1px;
   border-style:solid;
 }
+
+
+/* Workspace interaction polish: dedicated drag handles and stable owner pickers. */
+.drag-grip-col,.drag-grip-cell{width:36px;min-width:36px;max-width:36px;text-align:center;padding-left:5px!important;padding-right:5px!important}
+.drag-grip{width:25px;height:25px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;color:var(--muted);background:transparent;font-size:17px;line-height:1;cursor:grab;user-select:none}
+.drag-grip:hover{color:var(--accent);background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 38%,var(--border))}
+.drag-grip:active{cursor:grabbing;background:var(--accent-bg);border-color:var(--accent)}
+.drag-grip.disabled{opacity:.28;cursor:not-allowed;background:transparent;border-color:transparent}
+.grid-wrap tbody tr.dragging{opacity:.5;background:var(--accent-bg)!important;box-shadow:inset 4px 0 var(--accent)!important}
+.grid-wrap tbody tr.drop-target{background:color-mix(in srgb,var(--accent) 11%,var(--surface))!important}
+.grid-wrap tbody tr.drop-target.drop-before{box-shadow:inset 0 3px var(--accent)!important}
+.grid-wrap tbody tr.drop-target.drop-after{box-shadow:inset 0 -3px var(--accent)!important}
+
+.card-drag-handle{flex:0 0 26px;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;color:var(--muted);background:transparent;font-size:17px;line-height:1;cursor:grab;user-select:none}
+.card-drag-handle:hover{color:var(--accent);background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 38%,var(--border))}
+.card-drag-handle:active{cursor:grabbing}
+.card-drag-handle.disabled{opacity:.28;cursor:not-allowed}
+.people-card.drop-target{position:relative;background:color-mix(in srgb,var(--accent) 10%,var(--surface))!important}
+.people-card.drop-target.drop-before::before,.people-card.drop-target.drop-after::after{content:"";position:absolute;left:4px;right:4px;height:3px;border-radius:999px;background:var(--accent);z-index:4;pointer-events:none}
+.people-card.drop-target.drop-before::before{top:0}
+.people-card.drop-target.drop-after::after{bottom:0}
+
+.owner-select-control{position:relative;display:inline-grid;grid-template-columns:22px minmax(0,1fr) 16px;align-items:center;gap:4px;min-width:155px;max-width:100%;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden}
+.owner-select-control:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--border))}
+.owner-select-control:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
+.owner-avatar{width:18px;height:18px;margin-left:4px;border-radius:50%;display:grid;place-items:center;background:var(--accent-bg);color:var(--accent);font-size:9px;line-height:1}
+.owner-select-control select{appearance:none;-webkit-appearance:none;width:100%!important;min-width:0!important;max-width:none!important;border:0!important;background:transparent!important;padding:6px 2px!important;outline:0!important;font-size:11px;cursor:pointer}
+.owner-select-control select:disabled{cursor:not-allowed;opacity:.62}
+.owner-chevron{padding-right:6px;color:var(--muted);font-size:12px;pointer-events:none}
+.people-assignee{align-items:center}
+.people-assignee-label{font-size:9px;color:var(--muted)}
+.people-assignee .owner-select-control{width:100%;min-width:0}
+.sprint-workspace .people-assignee .owner-select-control select{padding:5px 2px!important;font-size:10px}
+.daily-panel-fields .owner-select-control{width:100%;min-width:0}
+.daily-panel-fields .owner-select-control select{padding:7px 2px!important;font-size:12px}
+
+html[data-theme=avd] .drag-grip:hover,
+html[data-theme=avd] .card-drag-handle:hover,
+html[data-theme=avd] .owner-select-control:focus-within{box-shadow:none!important}
