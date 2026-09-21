@@ -652,23 +652,23 @@ button.primary{font-weight:600}
 }
 
 
-/* AVD-friendly theme: solid, high-contrast surfaces designed to survive RDP/AVD compression. */
+/* AVD-friendly theme: light, flat, high-contrast surfaces designed to survive RDP/AVD compression. */
 :root[data-theme=avd]{
-  color-scheme:dark;
-  --bg:#101720;
-  --rail:#0b1118;
-  --surface:#18232f;
-  --hover:#223243;
-  --text:#f4f7fb;
-  --muted:#bdc8d5;
-  --border:#4b5f74;
-  --accent:#8eb8ff;
-  --accent-bg:#203b61;
-  --danger:#ff9696;
-  --success:#8be0bd;
-  --done-bg:#17372d;
-  --done-hover:#20483a;
-  --done-text:#a2e6cc;
+  color-scheme:light;
+  --bg:#f3f5f8;
+  --rail:#f8fafc;
+  --surface:#ffffff;
+  --hover:#e8edf3;
+  --text:#18222f;
+  --muted:#536171;
+  --border:#9aa9b8;
+  --accent:#245f9f;
+  --accent-bg:#dbe9f7;
+  --danger:#9b2d30;
+  --success:#2d6f55;
+  --done-bg:#e2f0e9;
+  --done-hover:#d4e8de;
+  --done-text:#2d6f55;
   --shadow:none;
   background:var(--bg);
   color:var(--text);
@@ -678,7 +678,7 @@ html[data-theme=avd] body{
   background:var(--bg);
 }
 
-/* Avoid effects that become blocky or banded when the AVD stream is bandwidth-constrained. */
+/* Avoid effects that become blocky, banded, or expensive to redraw on AVD. */
 html[data-theme=avd] *,
 html[data-theme=avd] *::before,
 html[data-theme=avd] *::after{
@@ -707,7 +707,7 @@ html[data-theme=avd] .home-card:hover{
 }
 
 html[data-theme=avd] .scrim{
-  background:#07111b;
+  background:#d7dee7cc;
   backdrop-filter:none!important;
 }
 
@@ -716,6 +716,7 @@ html[data-theme=avd] .install-app-button.ready{
   background:var(--accent-bg)!important;
   background-image:none!important;
   box-shadow:none!important;
+  color:#163f70!important;
 }
 
 html[data-theme=avd] .magic-orchestration-trigger:hover{
@@ -723,56 +724,61 @@ html[data-theme=avd] .magic-orchestration-trigger:hover{
 }
 
 html[data-theme=avd] .update-app-button{
-  background:#17372d!important;
-  border-color:#4f8f77!important;
+  background:#e2f0e9!important;
+  border-color:#71a08b!important;
+  color:#245d47!important;
 }
 
 html[data-theme=avd] .tag-chip{
-  background:#203b61!important;
-  color:#cfe0ff!important;
-  border-color:#5879a4!important;
+  background:#e3eef9!important;
+  color:#234f7f!important;
+  border-color:#7d9fbe!important;
 }
 
 html[data-theme=avd] .tag-suggestion{
   background:var(--surface)!important;
   color:var(--accent)!important;
-  border-color:#5879a4!important;
+  border-color:#7d9fbe!important;
 }
 
 html[data-theme=avd] .planning-fill.initiative{
-  background:#66b8ae!important;
+  background:#4c9188!important;
 }
 
 html[data-theme=avd] .planning-fill.unclassified{
-  background:#8392a3!important;
+  background:#748596!important;
   opacity:1!important;
 }
 
 html[data-theme=avd] .capacity-band{
-  background:#31584f!important;
+  background:#b9d7cc!important;
 }
 
 html[data-theme=avd] .capacity-meter.over{
-  background:#3a2730!important;
+  background:#f3dcdf!important;
 }
 
 html[data-theme=avd] .capacity-meter.near{
-  background:#3a3427!important;
+  background:#f3ead3!important;
 }
 
 html[data-theme=avd] .blocked-filter.active{
-  color:#ffd28c!important;
-  border-color:#c58a2f!important;
-  background:#3a2d18!important;
+  color:#7b5313!important;
+  border-color:#bd8b39!important;
+  background:#fff2d8!important;
 }
 
 html[data-theme=avd] .grid-wrap tbody tr.blocked:not(.finished){
-  background:#33291a!important;
-  box-shadow:inset 4px 0 #c58a2f!important;
+  background:#fff4df!important;
+  box-shadow:inset 4px 0 #bd8b39!important;
 }
 
 html[data-theme=avd] .grid-wrap tbody tr.blocked:not(.finished):hover{
-  background:#3d301c!important;
+  background:#f9e9c8!important;
+}
+
+html[data-theme=avd] .primary{
+  color:#fff!important;
 }
 
 html[data-theme=avd] .primary:hover{
@@ -781,14 +787,14 @@ html[data-theme=avd] .primary:hover{
 
 html[data-theme=avd] .magic-confidence.high,
 html[data-theme=avd] .magic-decision .accept.active{
-  background:#17372d!important;
-  border-color:#4f8f77!important;
+  background:#e2f0e9!important;
+  border-color:#71a08b!important;
 }
 
 html[data-theme=avd] .magic-confidence.medium{
-  background:#3a2d18!important;
-  border-color:#c58a2f!important;
-  color:#ffd28c!important;
+  background:#fff2d8!important;
+  border-color:#bd8b39!important;
+  color:#7b5313!important;
 }
 
 html[data-theme=avd] .magic-suggestions article.ignored{
@@ -818,7 +824,7 @@ html[data-theme=avd] .smart-fix-option{
   background:var(--hover)!important;
 }
 
-/* Keep edges explicit: subtle 1px alpha borders are easy to lose after remote compression. */
+/* Keep edges explicit: subtle alpha borders are easy to lose after remote compression. */
 html[data-theme=avd] .home-card,
 html[data-theme=avd] .person-column,
 html[data-theme=avd] .planning-config,
