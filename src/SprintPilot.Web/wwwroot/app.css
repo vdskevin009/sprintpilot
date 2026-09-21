@@ -964,3 +964,41 @@ html[data-theme=avd] .owner-select-control:focus-within{box-shadow:none!importan
 .daily-empty-line{padding:10px;color:var(--muted);font-size:10px;background:var(--hover);border-radius:7px}
 @media(max-width:900px){.daily-focus-item{grid-template-columns:28px minmax(180px,1fr) auto}.daily-focus-tags{display:none}.daily-focus-actions .owner-select-control{width:135px}}
 @media(max-width:650px){.daily-focus-heading{align-items:flex-start;flex-direction:column}.daily-focus-item{grid-template-columns:26px minmax(0,1fr)}.daily-focus-actions{grid-column:2;justify-content:flex-start;flex-wrap:wrap}.daily-focus-actions .owner-select-control{width:min(230px,100%)}}
+
+
+/* AVD v2: flat, modern, light, and deliberately low-noise. */
+:root[data-theme=avd]{
+ --bg:#f5f7fa;
+ --rail:#f8fafc;
+ --surface:#ffffff;
+ --hover:#edf2f6;
+ --text:#17212b;
+ --muted:#586777;
+ --border:#c7d0da;
+ --accent:#205f9d;
+ --accent-bg:#e3eef8;
+ --shadow:none;
+}
+html[data-theme=avd] .rail{border-right:1px solid #dbe1e8;box-shadow:none!important}
+html[data-theme=avd] .rail .nav-button{border:0!important;background:transparent!important;box-shadow:none!important;border-radius:8px;color:var(--text)}
+html[data-theme=avd] .rail .nav-button:hover{background:#eef3f7!important}
+html[data-theme=avd] .rail .nav-button.active{position:relative;background:#e4eef8!important;color:#174f85!important;font-weight:650}
+html[data-theme=avd] .rail .nav-button.active::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:3px;background:var(--accent)}
+html[data-theme=avd] .workspace-label button{border:0!important;background:transparent!important}
+html[data-theme=avd] .home-card,
+html[data-theme=avd] .meeting-card,
+html[data-theme=avd] .planning-config,
+html[data-theme=avd] .person-column,
+html[data-theme=avd] .daily-person-summary,
+html[data-theme=avd] .daily-focus-item{border-color:#d9e0e7!important;box-shadow:none!important}
+html[data-theme=avd] .filter-shell{border-color:#d9e0e7!important;box-shadow:none!important}
+html[data-theme=avd] .filter-pill{border-color:transparent;background:#f1f4f7}
+html[data-theme=avd] .filter-pill:hover{background:#e8eef4}
+html[data-theme=avd] .filter-pill.active{border-color:transparent!important;background:#dfeaf5!important;color:#174f85!important}
+html[data-theme=avd] .owner-select-control{border-color:#cbd4de}
+html[data-theme=avd] .owner-select-control:focus-within{border-color:var(--accent);box-shadow:none!important}
+html[data-theme=avd] .grid-wrap{border-color:#d6dde5!important}
+html[data-theme=avd] .grid-wrap th{background:#f7f9fb}
+html[data-theme=avd] .grid-wrap td,
+html[data-theme=avd] .grid-wrap th{border-bottom-color:#e1e6eb}
+html[data-theme=avd] button:not(.nav-button):not(.filter-pill):not(.title-button):not(.daily-focus-title){box-shadow:none!important}
