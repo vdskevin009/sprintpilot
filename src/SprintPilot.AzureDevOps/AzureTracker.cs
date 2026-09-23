@@ -117,6 +117,33 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   foreach(var branch in branches){if(!byName.TryGetValue(StripHead(branch.Name),out var row)){result.Add(new(branch.Name,false,"Azure DevOps did not confirm this deletion. Refresh before retrying."));continue;}var status=S(row?["updateStatus"]);var success=status.Equals("succeeded",StringComparison.OrdinalIgnoreCase);var error=success?null:status switch{"staleOldObjectId"=>"The branch changed after it was loaded. Refresh and review it again.","rejectedByPlugin"=>"Azure DevOps branch policy rejected the deletion.","locked"=>"The branch is locked in Azure DevOps.",_=>"Azure DevOps did not delete the branch ("+(status==""?"unknown status":status)+")."};result.Add(new(branch.Name,success,error));}
   return result;
  }
+ public async Task<IReadOnlyList<string>> PipelineYamlFilesAsync(string project,string repositoryId,string branch,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId)||string.IsNullOrWhiteSpace(branch))throw new TrackerException("Choose a project, repository and branch first.");
+  var c=await Credentials(ct);var version=StripHead(branch);
+  var path="_apis/git/repositories/"+E(repositoryId)+"/items?recursionLevel=Full&includeContentMetadata=false&versionDescriptor.versionType=branch&versionDescriptor.version="+E(version);
+  var rows=Values(await Send(c,path,HttpMethod.Get,ct:ct,projectOverride:project));
+  return rows.Select(n=>S(n?["path"])).Where(p=>p.EndsWith(".yml",StringComparison.OrdinalIgnoreCase)||p.EndsWith(".yaml",StringComparison.OrdinalIgnoreCase)).OrderBy(p=>p,StringComparer.OrdinalIgnoreCase).ToArray();
+ }
+ public async Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project))throw new TrackerException("Choose a project first.");
+  var c=await Credentials(ct);var rows=Values(await Send(c,"_apis/build/definitions?$top=1000",HttpMethod.Get,ct:ct,projectOverride:project));
+  return rows.Select(n=>new PipelineDefinition(n?["id"]?.GetValue<int>()??0,S(n?["name"]),S(n?["repository"]?["id"]),S(n?["process"]?["yamlFilename"]),StripHead(S(n?["repository"]?["defaultBranch"])))).Where(x=>x.Id>0).OrderBy(x=>x.Name,StringComparer.OrdinalIgnoreCase).ToArray();
+ }
+ public async Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId)||string.IsNullOrWhiteSpace(branch))throw new TrackerException("Choose a project, repository and branch first.");
+  if(pipelines.Count==0)return [];
+  var c=await Credentials(ct);var repo=await Send(c,"_apis/git/repositories/"+E(repositoryId),HttpMethod.Get,ct:ct,projectOverride:project);
+  var repoName=S(repo["name"]);var results=new List<PipelineCreateResult>();
+  foreach(var p in pipelines){
+   if(string.IsNullOrWhiteSpace(p.Name)||string.IsNullOrWhiteSpace(p.YamlPath)){results.Add(new(p.Name,false,null,"Pipeline name and YAML path are required."));continue;}
+   try{
+    var body=new {name=p.Name,path="\\",type="build",queueStatus="enabled",process=new {type=2,yamlFilename=p.YamlPath},repository=new {id=repositoryId,name=repoName,type="TfsGit",defaultBranch="refs/heads/"+StripHead(branch),clean="false",checkoutSubmodules=false}};
+    var created=await Send(c,"_apis/build/definitions",HttpMethod.Post,body,ct:ct,projectOverride:project);
+    results.Add(new(p.Name,true,created["id"]?.GetValue<int>(),null));
+   }catch(TrackerException ex){results.Add(new(p.Name,false,null,ex.Message));}
+  }
+  return results;
+ }
  public async Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default){
   if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");
   var c=await Credentials(ct);var repository=await Send(c,"_apis/git/repositories/"+E(repositoryId),HttpMethod.Get,ct:ct,projectOverride:project);var repositoryName=S(repository["name"]);
