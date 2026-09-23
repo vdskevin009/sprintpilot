@@ -117,6 +117,35 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   foreach(var branch in branches){if(!byName.TryGetValue(StripHead(branch.Name),out var row)){result.Add(new(branch.Name,false,"Azure DevOps did not confirm this deletion. Refresh before retrying."));continue;}var status=S(row?["updateStatus"]);var success=status.Equals("succeeded",StringComparison.OrdinalIgnoreCase);var error=success?null:status switch{"staleOldObjectId"=>"The branch changed after it was loaded. Refresh and review it again.","rejectedByPlugin"=>"Azure DevOps branch policy rejected the deletion.","locked"=>"The branch is locked in Azure DevOps.",_=>"Azure DevOps did not delete the branch ("+(status==""?"unknown status":status)+")."};result.Add(new(branch.Name,success,error));}
   return result;
  }
+ public async Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");
+  var c=await Credentials(ct);var repository=await Send(c,"_apis/git/repositories/"+E(repositoryId),HttpMethod.Get,ct:ct,projectOverride:project);var repositoryName=S(repository["name"]);
+  var rows=Values(await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/pullrequests?searchCriteria.status=active&$top=1000",HttpMethod.Get,ct:ct,projectOverride:project));
+  var commits=new System.Collections.Concurrent.ConcurrentDictionary<string,(string Author,DateTimeOffset? Date,string Message)>(StringComparer.OrdinalIgnoreCase);
+  var ids=rows.Select(n=>S(n?["lastMergeSourceCommit"]?["commitId"])).Where(x=>x!="").Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+  await Parallel.ForEachAsync(ids,new ParallelOptions{MaxDegreeOfParallelism=8,CancellationToken=ct},async (id,token)=>{
+   try{var commit=await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/commits/"+E(id),HttpMethod.Get,ct:token,projectOverride:project);DateTimeOffset? date=DateTimeOffset.TryParse(S(commit["author"]?["date"]),out var parsed)?parsed:null;commits[id]=(S(commit["author"]?["name"]),date,S(commit["comment"]));}
+   catch(TrackerException){commits[id]=("",null,"");}
+  });
+  DateTimeOffset Date(JsonNode? n)=>DateTimeOffset.TryParse(S(n),out var parsed)?parsed:default;
+  return rows.Select(n=>{var id=n?["pullRequestId"]?.GetValue<int>()??0;var sourceCommit=S(n?["lastMergeSourceCommit"]?["commitId"]);commits.TryGetValue(sourceCommit,out var commit);var reviewers=(JsonArray?)n?["reviewers"]??[];var votes=reviewers.Select(r=>r?["vote"]?.GetValue<int>()??0).ToArray();var url=S(n?["_links"]?["web"]?["href"]);if(url==""&&activeConnection is {} connection)url=$"https://dev.azure.com/{E(connection.Organization)}/{E(project)}/_git/{E(repositoryName)}/pullrequest/{id}";return new GitPullRequest(id,S(n?["title"]),StripHead(S(n?["sourceRefName"])),StripHead(S(n?["targetRefName"])),S(n?["createdBy"]?["displayName"]),Date(n?["creationDate"]),n?["isDraft"]?.GetValue<bool>()??false,sourceCommit,commit.Author,commit.Date,commit.Message,reviewers.Count,votes.Count(v=>v>=5),votes.Count(v=>v<0),S(n?["mergeStatus"]),url);}).Where(p=>p.Id>0).OrderBy(p=>p.CreatedDate).ToArray();
+ }
+ public async Task<IReadOnlyList<PullRequestAbandonResult>> AbandonPullRequestsAsync(string project,string repositoryId,IReadOnlyList<PullRequestAbandonRequest> pullRequests,CancellationToken ct=default){
+  if(pullRequests.Count==0)return [];
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");
+  if(pullRequests.Any(p=>p.Id<=0||!System.Text.RegularExpressions.Regex.IsMatch(p.SourceCommitId,"^[0-9a-fA-F]{40}$")))throw new TrackerException("One or more pull requests changed. Refresh before abandoning.");
+  var c=await Credentials(ct);var results=new System.Collections.Concurrent.ConcurrentBag<PullRequestAbandonResult>();
+  await Parallel.ForEachAsync(pullRequests,new ParallelOptions{MaxDegreeOfParallelism=4,CancellationToken=ct},async (request,token)=>{
+   try{
+    var current=await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/pullrequests/"+request.Id,HttpMethod.Get,ct:token,projectOverride:project);
+    if(!S(current["status"]).Equals("active",StringComparison.OrdinalIgnoreCase)){results.Add(new(request.Id,false,"Pull request is no longer active. Refresh before retrying."));return;}
+    var sourceCommit=S(current["lastMergeSourceCommit"]?["commitId"]);if(!sourceCommit.Equals(request.SourceCommitId,StringComparison.OrdinalIgnoreCase)){results.Add(new(request.Id,false,"The source branch changed after review. Refresh and review the pull request again."));return;}
+    var updated=await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/pullrequests/"+request.Id,HttpMethod.Patch,new{status="abandoned"},ct:token,projectOverride:project);
+    var success=S(updated["status"]).Equals("abandoned",StringComparison.OrdinalIgnoreCase);results.Add(new(request.Id,success,success?null:"Azure DevOps did not confirm the pull request was abandoned."));
+   }catch(TrackerException ex){results.Add(new(request.Id,false,ex.Message));}catch(OperationCanceledException){throw;}catch{results.Add(new(request.Id,false,"The pull request could not be abandoned. Refresh before retrying."));}
+  });
+  return results.OrderBy(r=>r.Id).ToArray();
+ }
  public async Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){
   var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);
   var team=meta.Teams.FirstOrDefault(t=>t.Id==c.Connection.Team||t.Name==c.Connection.Team)??meta.Teams.First();

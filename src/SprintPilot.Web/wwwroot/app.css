@@ -1073,3 +1073,21 @@ html[data-theme=avd] .branch-recommendations,
 html[data-theme=avd] .branch-cleanup-summary article,
 html[data-theme=avd] .branch-cleanup-summary>label,
 html[data-theme=avd] .branch-table-wrap{border-color:#d9e0e7!important;box-shadow:none!important}
+
+
+/* Pull request cleanup builds on the branch-cleanup layout. */
+.pr-cleanup-page .branch-cleanup-heading p{max-width:900px}
+.pr-cleanup-summary article:nth-child(3) strong{font-size:19px}
+.pr-table{min-width:1280px}
+.pr-table td:nth-child(2){min-width:250px}
+.pr-table td:nth-child(3){min-width:220px}
+.pr-table td:nth-child(4){min-width:220px}
+.pr-table td:nth-child(5){min-width:150px}
+.pr-table td:nth-child(6){min-width:145px}
+.pr-table td:nth-child(7){min-width:100px}
+.pr-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;white-space:nowrap}
+.pr-row-actions a{font-size:9px;color:var(--accent);text-decoration:none}
+.pr-row-actions a:hover{text-decoration:underline}
+.pr-abandon-review article{grid-template-columns:minmax(0,1fr) auto}
+.pr-recommendations .branch-recommendation-list strong{max-width:720px}
+@media(max-width:760px){.pr-toolbar{grid-template-columns:1fr}.pr-row-actions{justify-content:flex-start}}

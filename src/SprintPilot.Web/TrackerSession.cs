@@ -15,6 +15,8 @@ public sealed class TrackerSession(AzureTracker azure,DemoTracker demo):IWorkTra
  public Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default)=>Active.RepositoriesAsync(project,ct);
  public Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default)=>Active.BranchesAsync(project,repositoryId,ct);
  public Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default)=>Active.DeleteBranchesAsync(project,repositoryId,branches,ct);
+ public Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default)=>Active.PullRequestsAsync(project,repositoryId,ct);
+ public Task<IReadOnlyList<PullRequestAbandonResult>> AbandonPullRequestsAsync(string project,string repositoryId,IReadOnlyList<PullRequestAbandonRequest> pullRequests,CancellationToken ct=default)=>Active.AbandonPullRequestsAsync(project,repositoryId,pullRequests,ct);
  public Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default)=>Active.PlanningAsync(types,ct);
  public Task<WorkItem> GetAsync(int id,CancellationToken ct=default)=>Active.GetAsync(id,ct);
  public Task<IReadOnlyList<WorkItemComment>> CommentsAsync(int id,CancellationToken ct=default)=>Active.CommentsAsync(id,ct);
