@@ -21,6 +21,11 @@ public record MemberCapacity(string PersonId,string PersonName,DateRange[] DaysO
 public record SprintCapacity(MemberCapacity[] Members,DateRange[] TeamDaysOff);
 public record Person(string Id,string Name,string UniqueName);
 public record Team(string Id,string Name);
+public record AzureProject(string Id,string Name);
+public record GitRepository(string Id,string Name,string DefaultBranch);
+public sealed record GitBranch(string Name,string ObjectId,string Creator,string LastCommitAuthor,DateTimeOffset? LastCommitDate,string LastCommitMessage,bool IsDefault,bool IsLocked,bool HasActivePullRequest,bool HasCompletedPullRequest);
+public sealed record BranchDeleteRequest(string Name,string ObjectId);
+public sealed record BranchDeleteResult(string Name,bool Success,string? Error);
 public record StateDefinition(string Name,string Category);
 public record TypeDefinition(string Name,StateDefinition[] States,string[] Fields,string? EstimateField,string? OrderField=null) {
  public bool IsFinished(string state)=>States.Any(s=>s.Name==state && s.Category is "Completed" or "Removed");
@@ -47,6 +52,8 @@ public sealed class Preferences {
  public int Version {get;set;}
  public Dictionary<string,PlanningSettings> PlanningProfiles {get;set;}=new();
  public string Theme {get;set;}="system";
+ public Dictionary<string,string> LastTeams {get;set;}=new(StringComparer.OrdinalIgnoreCase);
+ public int BranchCleanupStaleDays {get;set;}=90;
  public string[] BlockedTags {get;set;}=["Blocked by External Dependency","Waiting Feedback Business"];
  public Dictionary<string,InitiativeMetadata> InitiativeMetadata {get;set;}=new(StringComparer.OrdinalIgnoreCase);
  public string[] Columns {get;set;}=["Order","ID","Type","Title","Owner","State","Iteration","Estimate","Tags"];

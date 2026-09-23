@@ -11,6 +11,13 @@ var meta=await tracker.MetadataAsync();Check(meta.Types[0].EstimateField=="Micro
 Check(fake.SawConnectionDataParameters,"Connection test supplies Azure DevOps synchronization parameters");
 var calls=fake.Calls;await tracker.MetadataAsync();Check(fake.Calls==calls,"Metadata cache suppresses repeated requests");
 var capacity=await tracker.CapacityAsync("sprint");Check(capacity.Members.Single().CapacityPerDay==6,"Azure DevOps capacity-per-day is retained");Check(capacity.Members.Single().DaysOff.Length==1,"Azure DevOps member days off are retained");
+var projects=await tracker.ProjectsAsync();Check(projects.Count==2&&projects[0].Name=="Archive"&&projects[1].Name=="Project","Accessible projects are listed and sorted");
+var repositories=await tracker.RepositoriesAsync("Project");Check(repositories.Count==1&&repositories[0].Id=="repo"&&repositories[0].DefaultBranch=="main","Git repositories expose normalized default branches");
+var branches=await tracker.BranchesAsync("Project","repo");var oldBranch=branches.Single(b=>b.Name=="feature/old");
+Check(branches.Count==3&&branches.Single(b=>b.Name=="main").IsDefault&&branches.Single(b=>b.Name=="feature/live").HasActivePullRequest,"Branch inventory marks default and active-PR refs");
+Check(oldBranch.HasCompletedPullRequest&&oldBranch.LastCommitAuthor=="Test Author"&&oldBranch.LastCommitDate is not null,"Branch inventory attaches merged-tip and latest-commit evidence");
+var deleted=await tracker.DeleteBranchesAsync("Project","repo",[new("feature/old",oldBranch.ObjectId)]);
+Check(deleted.Count==1&&deleted[0].Success&&fake.LastRefDelete is not null&&fake.LastRefDelete[0]?["oldObjectId"]?.ToString()==oldBranch.ObjectId&&fake.LastRefDelete[0]?["newObjectId"]?.ToString()==new string('0',40),"Branch delete uses reviewed object ID and zero target ref");
 var rows=await tracker.SprintAsync("Project\\Sprint 'A'");Check(rows.Count==201&&fake.BatchSizes.SequenceEqual(new[]{200,1}),"Read batching respects 200-item limit");
 Check(rows[0].Id==201&&rows[0].Order==1&&rows[^1].Id==1&&rows[^1].Order==201,"Sprint read follows the iteration backlog order instead of global backlog rank");
 await tracker.ReorderSprintAsync("sprint","Project\\Sprint 'A'",200,201,199);
@@ -49,13 +56,20 @@ sealed class FakeCredentials:ICredentialStore {
 }
 sealed class FakeAzure:HttpMessageHandler {
  public const string Canary="synthetic-test-value-do-not-log";
- public int Calls,PatchCalls,ReorderCalls;public List<int> BatchSizes=[];public bool SawExpand,SawConnectionDataParameters,FailPatch,Paging,OmitOne;public string LastWiql="";public JsonArray? LastPatch;public JsonObject? LastReorder;
+ public int Calls,PatchCalls,ReorderCalls;public List<int> BatchSizes=[];public bool SawExpand,SawConnectionDataParameters,FailPatch,Paging,OmitOne;public string LastWiql="";public JsonArray? LastPatch,LastRefDelete;public JsonObject? LastReorder;
  static JsonObject Item(int id,int rev=1)=>new(){["id"]=id,["rev"]=rev,["fields"]=new JsonObject{["System.Title"]="Test item",["System.WorkItemType"]="Product Backlog Item",["System.State"]="New",["System.IterationPath"]="Project\\Sprint 'A'",["System.AreaPath"]="Project",["Microsoft.VSTS.Scheduling.Effort"]=8,["Microsoft.VSTS.Common.StackRank"]=100,["Microsoft.VSTS.Common.BacklogPriority"]=900},["relations"]=new JsonArray(new JsonObject{["rel"]="System.LinkTypes.Hierarchy-Reverse",["url"]="https://dev.azure.com/example/_apis/wit/workItems/5000"},new JsonObject{["rel"]="System.LinkTypes.Hierarchy-Forward",["url"]="https://dev.azure.com/example/_apis/wit/workItems/6000"})};
  protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r,CancellationToken ct){Calls++;var p=r.RequestUri!.AbsolutePath;var body=r.Content is null?"":await r.Content.ReadAsStringAsync(ct);JsonNode n;
   if(r.Headers.Authorization?.Scheme!="Basic")throw new Exception("Authentication header missing");
   if(r.Method==HttpMethod.Patch&&p.EndsWith("/workitemsorder")){ReorderCalls++;LastReorder=JsonNode.Parse(body)!.AsObject();n=new JsonObject{["value"]=new JsonArray(new JsonObject{["id"]=LastReorder["ids"]![0]!.GetValue<int>(),["order"]=1200000000})};}
   else if(r.Method==HttpMethod.Patch){PatchCalls++;LastPatch=JsonNode.Parse(body)!.AsArray();if(FailPatch)return new(HttpStatusCode.Forbidden){Content=new StringContent(Canary)};n=Item(1,2);}
   else if(p.EndsWith("/connectionData")){var q=r.RequestUri.Query;SawConnectionDataParameters=q.Contains("connectOptions=1")&&q.Contains("lastChangeId=-1")&&q.Contains("lastChangeId64=-1")&&!q.Contains("api-version");if(!SawConnectionDataParameters)return new(HttpStatusCode.BadRequest);n=JsonNode.Parse("""{"authenticatedUser":{"id":"me","providerDisplayName":"Test user"}}""")!;}
+  else if(p.EndsWith("/_apis/projects"))n=JsonNode.Parse("""{"value":[{"id":"project","name":"Project"},{"id":"archive","name":"Archive"}]}""")!;
+  else if(p.EndsWith("/_apis/git/repositories")&&r.Method==HttpMethod.Get)n=JsonNode.Parse("""{"value":[{"id":"repo","name":"Repo","defaultBranch":"refs/heads/main","isDisabled":false}]}""")!;
+  else if(p.EndsWith("/_apis/git/repositories/repo"))n=JsonNode.Parse("""{"id":"repo","name":"Repo","defaultBranch":"refs/heads/main"}""")!;
+  else if(p.EndsWith("/_apis/git/repositories/repo/refs")&&r.Method==HttpMethod.Get)n=JsonNode.Parse("""{"value":[{"name":"refs/heads/main","objectId":"1111111111111111111111111111111111111111","isLocked":false,"creator":{"displayName":"Test User"}},{"name":"refs/heads/feature/live","objectId":"2222222222222222222222222222222222222222","isLocked":false,"creator":{"displayName":"Live User"}},{"name":"refs/heads/feature/old","objectId":"3333333333333333333333333333333333333333","isLocked":false,"creator":{"displayName":"Old User"}}]}""")!;
+  else if(p.EndsWith("/_apis/git/repositories/repo/refs")&&r.Method==HttpMethod.Post){LastRefDelete=JsonNode.Parse(body)!.AsArray();n=new JsonArray(new JsonObject{{"name","refs/heads/feature/old"},{"updateStatus","succeeded"},{"success",true}});}
+  else if(p.EndsWith("/_apis/git/repositories/repo/pullrequests")){var active=r.RequestUri!.Query.Contains("status=active",StringComparison.OrdinalIgnoreCase);n=active?JsonNode.Parse("""{"value":[{"sourceRefName":"refs/heads/feature/live"}]}""")!:JsonNode.Parse("""{"value":[{"sourceRefName":"refs/heads/feature/old","lastMergeSourceCommit":{"commitId":"3333333333333333333333333333333333333333"}}]}""")!;}
+  else if(p.Contains("/_apis/git/repositories/repo/commits/")){var sha=p.Split('/').Last();n=new JsonObject{{"commitId",sha},{"comment","Test commit"},{"author",new JsonObject{{"name","Test Author"},{"date","2026-01-01T12:00:00Z"}}}};}
   else if(p.EndsWith("/members"))n=JsonNode.Parse("""{"value":[{"identity":{"id":"me","displayName":"Test user","uniqueName":"test@example.test"}}]}""")!;
   else if(p.EndsWith("/teams"))n=JsonNode.Parse("""{"value":[{"id":"team","name":"Team"}]}""")!;
   else if(p.EndsWith("/iterations"))n=JsonNode.Parse("""{"value":[{"id":"sprint","name":"Sprint A","path":"Project\\Sprint 'A'","attributes":{}}]}""")!;
