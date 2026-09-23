@@ -1,0 +1,50 @@
+@page "/pipeline-factory"
+@rendermode InteractiveServer
+@inject IWorkTracker Tracker
+@inject NavigationManager Nav
+
+<PageTitle>Pipeline Factory · SprintPilot</PageTitle>
+<section class="pipeline-factory-page">
+ <div class="page-heading branch-cleanup-heading"><div><div class="heading-context">Azure DevOps automation</div><h1>Pipeline Factory</h1><p>Create many YAML pipelines without repeating the Azure DevOps wizard. Choose the project, repository and branch; SprintPilot discovers YAML files and skips definitions that already exist.</p></div><div class="toolbar"><button @onclick='()=>Nav.NavigateTo("/")'>← SprintPilot</button><button disabled="@loading" @onclick="Reload">↻ Refresh</button></div></div>
+ @if(error!=""){<div class="empty"><strong>Could not load Pipeline Factory</strong><p>@error</p></div>}
+ <div class="pipeline-factory-selectors">
+  <label><span>1 · Project</span><select value="@project" @onchange="ProjectChanged" disabled="@loading">@foreach(var p in projects){<option value="@p.Name">@p.Name</option>}</select></label>
+  <label><span>2 · Repository</span><select value="@repositoryId" @onchange="RepositoryChanged" disabled="@(loading||repositories.Count==0)">@foreach(var r in repositories){<option value="@r.Id">@r.Name</option>}</select></label>
+  <label><span>3 · Branch</span><select value="@branchName" @onchange="BranchChanged" disabled="@(loading||branches.Count==0)">@foreach(var b in branches){<option value="@b.Name">@b.Name</option>}</select></label>
+ </div>
+ @if(loading){<div class="branch-cleanup-loading"><strong>Loading pipeline candidates…</strong><span>Reading repositories, branches, YAML files and existing build definitions.</span></div>}
+ else if(yamlFiles.Count>0){
+  <div class="pipeline-factory-summary"><article><span>YAML files</span><strong>@yamlFiles.Count</strong></article><article><span>Already configured</span><strong>@Rows.Count(x=>x.Exists)</strong></article><article class="recommended"><span>Ready to create</span><strong>@Rows.Count(x=>!x.Exists)</strong></article><article><span>Selected</span><strong>@Selected.Count</strong></article></div>
+  <div class="branch-toolbar"><input class="search" placeholder="Filter YAML files…" @bind="search" @bind:event="oninput"/><div class="toolbar branch-selection-actions"><button @onclick="SelectMissing">Select missing</button><button @onclick="ClearSelection">Clear</button><button class="primary" disabled="@(Selected.Count==0||creating)" @onclick="CreateSelected">@(creating?"Creating…":$"Create {Selected.Count} pipeline{(Selected.Count==1?"":"s")}")</button></div></div>
+  <div class="branch-table-wrap"><table class="branch-table pipeline-table"><thead><tr><th class="branch-check">Create</th><th>Pipeline name</th><th>YAML path</th><th>Status</th></tr></thead><tbody>
+   @foreach(var row in VisibleRows){<tr class="@(!row.Exists?"recommended-row":"")"><td class="branch-check"><input type="checkbox" disabled="@row.Exists" checked="@selected.Contains(row.Path)" @onchange="()=>Toggle(row.Path)"/></td><td><input value="@NameFor(row.Path)" disabled="@row.Exists" @oninput="e=>names[row.Path]=e.Value?.ToString()??string.Empty"/></td><td><code>@row.Path</code></td><td>@if(row.Exists){<span class="branch-badge merged">Exists</span>}else{<span class="branch-badge recommended">Ready</span>}@if(results.TryGetValue(row.Path,out var result)){<small class="pipeline-result @(result.Success?"success":"error-text")">@(result.Success?$"Created #{result.Id}":result.Error)</small>}</td></tr>}
+  </tbody></table></div>
+ } else if(projects.Count>0&&!loading){<div class="empty"><h2>No YAML files found</h2><p>Choose another repository or branch, or add a .yml/.yaml pipeline file first.</p></div>}
+</section>
+
+@code {
+ List<AzureProject> projects=[]; List<GitRepository> repositories=[]; List<GitBranch> branches=[]; List<string> yamlFiles=[]; List<PipelineDefinition> existing=[];
+ string project="",repositoryId="",branchName="",search="",error=""; bool loading,creating;
+ readonly HashSet<string> selected=new(StringComparer.OrdinalIgnoreCase); readonly Dictionary<string,string> names=new(StringComparer.OrdinalIgnoreCase); readonly Dictionary<string,PipelineCreateResult> results=new(StringComparer.OrdinalIgnoreCase);
+ sealed record Row(string Path,bool Exists);
+ IEnumerable<Row> Rows=>yamlFiles.Select(p=>new Row(p,existing.Any(x=>x.RepositoryId.Equals(repositoryId,StringComparison.OrdinalIgnoreCase)&&Normalize(x.YamlPath).Equals(Normalize(p),StringComparison.OrdinalIgnoreCase))));
+ IEnumerable<Row> VisibleRows=>Rows.Where(x=>search==""||x.Path.Contains(search,StringComparison.OrdinalIgnoreCase)||NameFor(x.Path).Contains(search,StringComparison.OrdinalIgnoreCase));
+ List<string> Selected=>selected.Where(p=>Rows.Any(r=>r.Path==p&&!r.Exists)).ToList();
+ protected override async Task OnInitializedAsync()=>await LoadProjects();
+ async Task LoadProjects(){await Guard(async()=>{projects=(await Tracker.ProjectsAsync()).ToList();project=projects.FirstOrDefault()?.Name??"";await LoadRepositories();});}
+ async Task LoadRepositories(){repositories=(await Tracker.RepositoriesAsync(project)).ToList();repositoryId=repositories.FirstOrDefault()?.Id??"";await LoadBranches();}
+ async Task LoadBranches(){branches=repositoryId==""?[]:(await Tracker.BranchesAsync(project,repositoryId)).ToList();branchName=branches.FirstOrDefault(b=>b.IsDefault)?.Name??branches.FirstOrDefault()?.Name??"";await LoadCandidates();}
+ async Task LoadCandidates(){selected.Clear();results.Clear();yamlFiles=branchName==""?[]:(await Tracker.PipelineYamlFilesAsync(project,repositoryId,branchName)).ToList();existing=(await Tracker.PipelinesAsync(project)).ToList();foreach(var p in yamlFiles)if(!names.ContainsKey(p))names[p]=SuggestedName(p);}
+ async Task ProjectChanged(ChangeEventArgs e){project=e.Value?.ToString()??"";await Guard(LoadRepositories);}
+ async Task RepositoryChanged(ChangeEventArgs e){repositoryId=e.Value?.ToString()??"";await Guard(LoadBranches);}
+ async Task BranchChanged(ChangeEventArgs e){branchName=e.Value?.ToString()??"";await Guard(LoadCandidates);}
+ async Task Reload()=>await Guard(LoadCandidates);
+ async Task Guard(Func<Task> action){loading=true;error="";try{await action();}catch(Exception ex){error=ex.Message;}finally{loading=false;}}
+ void SelectMissing(){selected.Clear();foreach(var r in Rows.Where(x=>!x.Exists))selected.Add(r.Path);}
+ void ClearSelection()=>selected.Clear();
+ void Toggle(string path){if(!selected.Add(path))selected.Remove(path);}
+ string NameFor(string path)=>names.TryGetValue(path,out var n)?n:SuggestedName(path);
+ static string SuggestedName(string path){var file=System.IO.Path.GetFileNameWithoutExtension(path);var folder=System.IO.Path.GetDirectoryName(path)?.Replace("\\","/").Trim('/');return string.IsNullOrWhiteSpace(folder)?file:$"{folder.Replace('/','-')}-{file}";}
+ static string Normalize(string p)=>"/"+p.Trim().TrimStart('/').Replace("\\","/");
+ async Task CreateSelected(){creating=true;error="";results.Clear();try{var requests=Selected.Select(p=>new PipelineCreateRequest(NameFor(p).Trim(),p)).ToArray();var created=await Tracker.CreatePipelinesAsync(project,repositoryId,branchName,requests);foreach(var r in created){var path=requests.First(x=>x.Name==r.Name).YamlPath;results[path]=r;}existing=(await Tracker.PipelinesAsync(project)).ToList();selected.Clear();}catch(Exception ex){error=ex.Message;}finally{creating=false;}}
+}

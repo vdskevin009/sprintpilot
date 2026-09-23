@@ -15,6 +15,7 @@
 <button class="nav-button @(screen=="workspace"?"active":"")" disabled="@(meta is null)" @onclick='()=>SetScreen("workspace")'>▦ Sprint workspace</button>
 <button class="nav-button @(screen=="cleanup"?"active":"")" disabled="@(meta is null)" @onclick="OpenCleanup">◷ Sprint cleanup</button>
 <button class="nav-button @(screen=="branches"?"active":"")" disabled="@(meta is null)" @onclick="OpenBranchCleanup">⎇ Branch review</button>
+<a class="nav-button nav-link-button" href="/pipeline-factory">⚙ Pipeline factory</a>
 <button class="nav-button @(screen=="pullrequests"?"active":"")" disabled="@(meta is null)" @onclick="OpenPullRequestCleanup">⇄ PR review</button>
 <div class="workspace-label">Saved views <button title="Save current view" disabled="@(meta is null)" @onclick='()=>Show("saveview")'>+</button></div>
 @foreach(var view in prefs.Views){<button class="nav-button" @onclick="()=>LoadView(view)">⌑ @view.Name</button>}
