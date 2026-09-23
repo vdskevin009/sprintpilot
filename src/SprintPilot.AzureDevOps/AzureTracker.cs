@@ -130,6 +130,12 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   DateTimeOffset Date(JsonNode? n)=>DateTimeOffset.TryParse(S(n),out var parsed)?parsed:default;
   return rows.Select(n=>{var id=n?["pullRequestId"]?.GetValue<int>()??0;var sourceCommit=S(n?["lastMergeSourceCommit"]?["commitId"]);commits.TryGetValue(sourceCommit,out var commit);var reviewers=(JsonArray?)n?["reviewers"]??[];var votes=reviewers.Select(r=>r?["vote"]?.GetValue<int>()??0).ToArray();var url=S(n?["_links"]?["web"]?["href"]);if(url==""&&activeConnection is {} connection)url=$"https://dev.azure.com/{E(connection.Organization)}/{E(project)}/_git/{E(repositoryName)}/pullrequest/{id}";return new GitPullRequest(id,S(n?["title"]),StripHead(S(n?["sourceRefName"])),StripHead(S(n?["targetRefName"])),S(n?["createdBy"]?["displayName"]),Date(n?["creationDate"]),n?["isDraft"]?.GetValue<bool>()??false,sourceCommit,commit.Author,commit.Date,commit.Message,reviewers.Count,votes.Count(v=>v>=5),votes.Count(v=>v<0),S(n?["mergeStatus"]),url);}).Where(p=>p.Id>0).OrderBy(p=>p.CreatedDate).ToArray();
  }
+ public async Task<IReadOnlyList<GitPullRequestSignal>> PullRequestSignalsAsync(string project,string repositoryId,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");
+  var c=await Credentials(ct);var rows=Values(await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/pullrequests?searchCriteria.status=all&$top=1000",HttpMethod.Get,ct:ct,projectOverride:project));
+  DateTimeOffset Date(JsonNode? n)=>DateTimeOffset.TryParse(S(n),out var parsed)?parsed:default;
+  return rows.Select(n=>new GitPullRequestSignal(n?["pullRequestId"]?.GetValue<int>()??0,S(n?["title"]),StripHead(S(n?["sourceRefName"])),S(n?["status"]).ToLowerInvariant(),Date(n?["creationDate"]))).Where(p=>p.Id>0).OrderBy(p=>p.CreatedDate).ToArray();
+ }
  public async Task<IReadOnlyList<PullRequestAbandonResult>> AbandonPullRequestsAsync(string project,string repositoryId,IReadOnlyList<PullRequestAbandonRequest> pullRequests,CancellationToken ct=default){
   if(pullRequests.Count==0)return [];
   if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");

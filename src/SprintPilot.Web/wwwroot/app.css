@@ -1091,3 +1091,32 @@ html[data-theme=avd] .branch-table-wrap{border-color:#d9e0e7!important;box-shado
 .pr-abandon-review article{grid-template-columns:minmax(0,1fr) auto}
 .pr-recommendations .branch-recommendation-list strong{max-width:720px}
 @media(max-width:760px){.pr-toolbar{grid-template-columns:1fr}.pr-row-actions{justify-content:flex-start}}
+
+
+/* Sprint workspace consolidation */
+.workspace-mode-tabs{display:inline-flex;gap:4px;padding:4px;margin:-8px 0 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.workspace-mode-tabs button{border:0;background:transparent;padding:6px 14px}
+.workspace-mode-tabs button.active{background:var(--accent-bg);color:var(--accent);font-weight:650}
+.daily-preset{display:inline-flex;align-items:center;padding:0 6px;color:var(--muted);font-size:11px}
+.order-controls{display:flex;align-items:center;gap:3px}
+.order-stepper{display:inline-flex;flex-direction:column;gap:1px}
+.order-stepper button{border:0;background:transparent;padding:0 4px;line-height:13px;font-size:10px;color:var(--muted)}
+.order-stepper button:hover:not(:disabled){color:var(--accent);background:var(--accent-bg)}
+.drag-grip-cell{min-width:50px}
+.repository-monitor-settings{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:12px}
+.repository-monitor-settings label{margin:0}
+.repository-monitor-status{font-size:11px;padding:0 18px 10px;color:var(--accent)}
+.editable-detail-panel{width:600px}
+.editable-detail-panel header>div{display:flex;flex-direction:column;gap:4px}
+.detail-save-state{font-size:11px;color:var(--muted);font-weight:500}
+.detail-save-state.dirty{color:var(--accent)}
+.detail-title-field{font-size:12px;color:var(--muted)}
+.detail-title-field input{font-size:18px;font-weight:650;color:var(--text)}
+.detail-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:14px 0}
+.detail-edit-grid label{margin:0}
+.detail-edit-grid input,.detail-edit-grid select,.editable-detail-panel textarea{width:100%}
+.detail-save-bar{position:sticky;bottom:-24px;margin:24px -24px -24px;padding:14px 24px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+html[data-theme=avd] .workspace-mode-tabs,
+html[data-theme=avd] .detail-save-bar,
+html[data-theme=avd] .order-stepper button{box-shadow:none}
+@media(max-width:700px){.repository-monitor-settings,.detail-edit-grid{grid-template-columns:1fr}.editable-detail-panel{width:100%}.detail-save-bar{align-items:stretch;flex-direction:column}}

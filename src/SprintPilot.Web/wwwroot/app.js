@@ -1,7 +1,14 @@
+const sprintPilotThemeKey='sprintpilot-theme';
+try{const savedTheme=localStorage.getItem(sprintPilotThemeKey);if(savedTheme)document.documentElement.dataset.theme=savedTheme;}catch{}
 window.sprintPilot={
  pwaPrompt:null,
  dotnet:null,
- theme(value){document.documentElement.dataset.theme=value;},
+ theme(value,persist=true){
+  let effective=value||'system';
+  try{const saved=localStorage.getItem(sprintPilotThemeKey);if(!persist&&effective==='system'&&saved)effective=saved;if(persist)localStorage.setItem(sprintPilotThemeKey,effective);}catch{}
+  document.documentElement.dataset.theme=effective;
+  return effective;
+ },
  clearToken(){const e=document.getElementById('pat');if(e)e.value='';},
  focusSearch(){document.getElementById('search')?.focus();},
  orderDropSuccess(id){const row=document.querySelector(`[data-work-item-id="${id}"]`);if(!row)return;row.scrollIntoView({block:'nearest',inline:'nearest'});row.classList.remove('order-drop-success');void row.offsetWidth;row.classList.add('order-drop-success');setTimeout(()=>row.classList.remove('order-drop-success'),1200);},
