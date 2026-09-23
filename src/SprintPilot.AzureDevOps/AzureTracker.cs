@@ -18,8 +18,8 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
  static string S(JsonNode? n)=>n?.ToString()??"";
  static JsonArray Values(JsonNode n)=>(JsonArray?)n["value"]??[];
  async Task<Credentials> Credentials(CancellationToken ct)=>await store.GetAsync(ct)??throw new TrackerException("Azure DevOps connection is required.");
- async Task<JsonNode> Send(Credentials c,string path,HttpMethod method,object? body=null,bool patch=false,CancellationToken ct=default,bool organization=false,bool apiVersion=true){
-  ValidateConnection(c.Connection);activeConnection=c.Connection;var baseUrl=$"https://dev.azure.com/{E(c.Connection.Organization)}/"+(organization?"":E(c.Connection.Project)+"/");
+ async Task<JsonNode> Send(Credentials c,string path,HttpMethod method,object? body=null,bool patch=false,CancellationToken ct=default,bool organization=false,bool apiVersion=true,string? projectOverride=null){
+  ValidateConnection(c.Connection);activeConnection=c.Connection;var selectedProject=projectOverride??c.Connection.Project;var baseUrl=$"https://dev.azure.com/{E(c.Connection.Organization)}/"+(organization?"":E(selectedProject)+"/");
   for(int attempt=0;;attempt++){
    using var req=new HttpRequestMessage(method,baseUrl+path+(apiVersion?(path.Contains('?')?"&":"?")+"api-version=7.1":""));await auth.AuthenticateAsync(req,c,ct);
    if(body is not null)req.Content=new StringContent(System.Text.Json.JsonSerializer.Serialize(body),Encoding.UTF8,patch?"application/json-patch+json":"application/json");
@@ -79,6 +79,43 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
   var members=((JsonArray?)capacity["value"]??[]).Select(n=>{var person=n?["teamMember"];var daily=((JsonArray?)n?["activities"]??[]).Select(a=>double.TryParse(S(a?["capacityPerDay"]),NumberStyles.Float,CultureInfo.InvariantCulture,out var h)&&double.IsFinite(h)&&h>0?h:0).Sum();return new MemberCapacity(S(person?["id"]),S(person?["displayName"]),Ranges(n?["daysOff"]),daily);}).Where(m=>m.PersonId!="").ToArray();
   var teamDays=await Send(c,$"{E(team.Id)}/_apis/work/teamsettings/iterations/{E(iterationId)}/teamdaysoff?api-version=6.0",HttpMethod.Get,ct:ct,apiVersion:false);
   return new SprintCapacity(members,Ranges(teamDays["daysOff"]));
+ }
+ public async Task<IReadOnlyList<AzureProject>> ProjectsAsync(CancellationToken ct=default){
+  var c=await Credentials(ct);var projects=new List<AzureProject>();
+  for(var skip=0;;skip+=100){var page=Values(await Send(c,$"_apis/projects?$top=100&$skip={skip}",HttpMethod.Get,ct:ct,organization:true));projects.AddRange(page.Select(n=>new AzureProject(S(n?["id"]),S(n?["name"]))));if(page.Count<100)break;}
+  return projects.OrderBy(p=>p.Name,StringComparer.OrdinalIgnoreCase).ToArray();
+ }
+ public async Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project))throw new TrackerException("Choose a project first.");
+  var c=await Credentials(ct);var rows=Values(await Send(c,"_apis/git/repositories",HttpMethod.Get,ct:ct,projectOverride:project));
+  return rows.Where(n=>n?["isDisabled"]?.GetValue<bool>()!=true).Select(n=>new GitRepository(S(n?["id"]),S(n?["name"]),StripHead(S(n?["defaultBranch"])))).OrderBy(r=>r.Name,StringComparer.OrdinalIgnoreCase).ToArray();
+ }
+ static string StripHead(string name)=>name.StartsWith("refs/heads/",StringComparison.OrdinalIgnoreCase)?name["refs/heads/".Length..]:name;
+ public async Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default){
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");
+  var c=await Credentials(ct);var repository=await Send(c,"_apis/git/repositories/"+E(repositoryId),HttpMethod.Get,ct:ct,projectOverride:project);var defaultRef=S(repository["defaultBranch"]);
+  var refs=Values(await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/refs?filter=heads/&$top=1000",HttpMethod.Get,ct:ct,projectOverride:project));
+  async Task<JsonArray> PullRequests(string status){var response=await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/pullrequests?searchCriteria.status="+E(status)+"&$top=1000",HttpMethod.Get,ct:ct,projectOverride:project);return Values(response);}
+  var active=await PullRequests("active");var completed=await PullRequests("completed");
+  var activeRefs=active.Select(n=>S(n?["sourceRefName"])).Where(x=>x!="").ToHashSet(StringComparer.OrdinalIgnoreCase);
+  var completedTips=completed.Where(n=>S(n?["sourceRefName"])!="").GroupBy(n=>S(n?["sourceRefName"]),StringComparer.OrdinalIgnoreCase).ToDictionary(g=>g.Key,g=>g.Select(n=>S(n?["lastMergeSourceCommit"]?["commitId"])).Where(x=>x!="").ToHashSet(StringComparer.OrdinalIgnoreCase),StringComparer.OrdinalIgnoreCase);
+  var commits=new System.Collections.Concurrent.ConcurrentDictionary<string,(string Author,DateTimeOffset? Date,string Message)>(StringComparer.OrdinalIgnoreCase);
+  await Parallel.ForEachAsync(refs,new ParallelOptions{MaxDegreeOfParallelism=8,CancellationToken=ct},async (n,token)=>{
+   var objectId=S(n?["objectId"]);if(objectId=="")return;
+   try{var commit=await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/commits/"+E(objectId),HttpMethod.Get,ct:token,projectOverride:project);DateTimeOffset? date=DateTimeOffset.TryParse(S(commit["author"]?["date"]),out var parsed)?parsed:null;commits[objectId]=(S(commit["author"]?["name"]),date,S(commit["comment"]));}
+   catch(TrackerException){commits[objectId]=("",null,"");}
+  });
+  return refs.Select(n=>{var fullName=S(n?["name"]);var name=StripHead(fullName);var objectId=S(n?["objectId"]);commits.TryGetValue(objectId,out var commit);var mergedTip=completedTips.TryGetValue(fullName,out var tips)&&tips.Contains(objectId);return new GitBranch(name,objectId,S(n?["creator"]?["displayName"]),commit.Author,commit.Date,commit.Message,fullName.Equals(defaultRef,StringComparison.OrdinalIgnoreCase),n?["isLocked"]?.GetValue<bool>()??false,activeRefs.Contains(fullName),mergedTip);}).OrderBy(b=>b.IsDefault?0:1).ThenBy(b=>b.Name,StringComparer.OrdinalIgnoreCase).ToArray();
+ }
+ public async Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default){
+  if(branches.Count==0)return [];
+  if(string.IsNullOrWhiteSpace(project)||string.IsNullOrWhiteSpace(repositoryId))throw new TrackerException("Choose a project and repository first.");
+  if(branches.Any(b=>string.IsNullOrWhiteSpace(b.Name)||!System.Text.RegularExpressions.Regex.IsMatch(b.ObjectId,"^[0-9a-fA-F]{40}$")))throw new TrackerException("One or more branches changed. Refresh before deleting.");
+  var c=await Credentials(ct);var zero=new string('0',40);var updates=branches.Select(b=>new{name="refs/heads/"+StripHead(b.Name),oldObjectId=b.ObjectId,newObjectId=zero}).ToArray();
+  var response=await Send(c,"_apis/git/repositories/"+E(repositoryId)+"/refs",HttpMethod.Post,updates,ct:ct,projectOverride:project);var values=response as JsonArray??(JsonArray?)response["value"]??[];
+  var byName=values.ToDictionary(n=>StripHead(S(n?["name"])),StringComparer.OrdinalIgnoreCase);var result=new List<BranchDeleteResult>();
+  foreach(var branch in branches){if(!byName.TryGetValue(StripHead(branch.Name),out var row)){result.Add(new(branch.Name,false,"Azure DevOps did not confirm this deletion. Refresh before retrying."));continue;}var status=S(row?["updateStatus"]);var success=status.Equals("succeeded",StringComparison.OrdinalIgnoreCase);var error=success?null:status switch{"staleOldObjectId"=>"The branch changed after it was loaded. Refresh and review it again.","rejectedByPlugin"=>"Azure DevOps branch policy rejected the deletion.","locked"=>"The branch is locked in Azure DevOps.",_=>"Azure DevOps did not delete the branch ("+(status==""?"unknown status":status)+")."};result.Add(new(branch.Name,success,error));}
+  return result;
  }
  public async Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){
   var c=await Credentials(ct);var meta=await MetadataAsync(ct:ct);
