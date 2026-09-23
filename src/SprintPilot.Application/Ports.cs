@@ -14,6 +14,10 @@ public interface IWorkTracker {
  Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default);
  Task ReorderSprintAsync(string iterationId,string iterationPath,int id,int previousId,int nextId,CancellationToken ct=default);
  Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default);
+ Task<IReadOnlyList<AzureProject>> ProjectsAsync(CancellationToken ct=default);
+ Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default);
+ Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default);
+ Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default);
  Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default);
  Task<WorkItem> GetAsync(int id,CancellationToken ct=default);
  Task<IReadOnlyList<WorkItemComment>> CommentsAsync(int id,CancellationToken ct=default);
