@@ -14,10 +14,11 @@ public partial class Home {
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
  bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode;
- bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported;
+ bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported,branchCleanupLoading,branchDeleting;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";string? workspacePriorityOwner;
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
  string smartFixPrompt="",smartFixCopilotText="",magicPrompt="",magicCopilotText="",appUpdateText="";
+ string branchProject="",branchProjectSearch="",branchRepositoryId="",branchRepositorySearch="",branchSearch="",branchStatusFilter="all";
  int sprintIndex,selectionAnchor=-1,templateIndex;
  string search="",ownerSearch="",stateFilter="",typeFilter="",tagFilter="",applicationFilter="",areaFilter="",priorityFilter="",quickView="Team",cleanupFilter="",sort="Order",workspaceMode="List";
  string commandSearch="",iterationSearch="",viewName="",bulkKind="",bulkValue="",aiText="",promptText="";
@@ -29,12 +30,15 @@ public partial class Home {
  readonly string[] Commands=["Next sprint","Previous sprint","Show my work","Show unassigned","Select all visible","Clear selection","Move selected to next sprint","Move selected to previous sprint","Assign selected","Add tag","Remove tag","Change state","New PBI","Refresh"];
  List<WorkItem> items=[],previousItems=[],related=[],tagHistory=[],planningItems=[],dailyLookupResults=[];SprintCapacity sprintCapacity=new([],[]);readonly Dictionary<string,List<WorkItem>> sprintCache=new();readonly Dictionary<string,SprintCapacity> capacityByIteration=new(StringComparer.OrdinalIgnoreCase);
  WorkItem? dailyPanelItem;List<WorkItemComment> dailyComments=[];List<CalendarHoliday> calendarHolidays=[];List<SmartOrderRow> smartOrderPlan=[];MeetingImport meetingImport=new();List<MeetingActionDraft> meetingActions=[];List<SmartFixGap> smartFixGaps=[];List<SmartFixSuggestion> smartFixSuggestions=[];List<MagicContext> magicContexts=[];List<MagicSuggestion> magicSuggestions=[];
+ List<AzureProject> branchProjects=[];List<GitRepository> branchRepositories=[];List<GitBranch> branches=[],branchDeleteQueue=[];List<BranchDeleteResult> branchDeleteResults=[];
  readonly HashSet<string> ownerFilters=new(StringComparer.OrdinalIgnoreCase);int? draggedId,dailyDragOverId,pendingOrderHighlightId;
  readonly HashSet<string> cleanupTagFilters=new(StringComparer.OrdinalIgnoreCase);
+ readonly HashSet<string> selectedBranches=new(StringComparer.OrdinalIgnoreCase);
  readonly HashSet<int> selected=[],busy=[];readonly Dictionary<int,ItemUpdate> drafts=new();
  List<ItemUpdate> pending=[];List<UpdateResult> results=[];WorkItem? detail;WorkItem[] aiItems=[];ReviewSection[] reviews=[];
  CancellationTokenSource refreshToken=new();readonly CancellationTokenSource lifetime=new();DotNetObjectReference<Home>? reference;
  string PlanningProfileKey => Tracker.Demo ? "demo" : $"{connection?.Organization}|{connection?.Project}|{connection?.Team}";
+ static string TeamPreferenceKey(ConnectionInfo c)=>$"{c.Organization}|{c.Project}";
  Iteration? CurrentSprint=>meta?.Iterations.ElementAtOrDefault(sprintIndex);
  Iteration? NextSprint=>meta?.Iterations.ElementAtOrDefault(sprintIndex+1);
  string Adjacent(int delta)=>meta?.Iterations.ElementAtOrDefault(sprintIndex+delta)?.Name??"No sprint";
@@ -49,6 +53,16 @@ public partial class Home {
  IEnumerable<WorkItem> CleanupItems=>meta is null?[]:items.Where(w=>!Quality.Finished(w,meta));
  IEnumerable<(string Id,string Name,int Count)> CleanupPeople=>CleanupItems.GroupBy(w=>w.OwnerId).Select(g=>(Id:g.Key,Name:PersonName(g.Key),Count:g.Count())).OrderBy(x=>x.Name=="Unassigned").ThenBy(x=>x.Name);
  IEnumerable<(string Tag,int Count)> CleanupTags=>CleanupItems.SelectMany(w=>w.Tags).GroupBy(t=>t,StringComparer.OrdinalIgnoreCase).Select(g=>(Tag:g.Key,Count:g.Count())).OrderBy(x=>x.Tag);
+ IEnumerable<AzureProject> FilteredBranchProjects=>branchProjects.Where(p=>branchProjectSearch==""||p.Name.Contains(branchProjectSearch,StringComparison.OrdinalIgnoreCase)).Take(75);
+ IEnumerable<GitRepository> FilteredBranchRepositories=>branchRepositories.Where(r=>branchRepositorySearch==""||r.Name.Contains(branchRepositorySearch,StringComparison.OrdinalIgnoreCase)).Take(75);
+ static bool ProtectedBranchConvention(GitBranch b){var n=b.Name.Trim('/').ToLowerInvariant();return n is "main" or "master" or "develop" or "development" or "dev"||n.StartsWith("release/")||n.StartsWith("hotfix/");}
+ int BranchAgeDays(GitBranch b)=>b.LastCommitDate is null?int.MaxValue:Math.Max(0,(int)Math.Floor((DateTimeOffset.UtcNow-b.LastCommitDate.Value).TotalDays));
+ bool BranchRecommended(GitBranch b){if(b.IsDefault||b.IsLocked||b.HasActivePullRequest||b.LastCommitDate is null||ProtectedBranchConvention(b))return false;var age=BranchAgeDays(b);return age>=prefs.BranchCleanupStaleDays&&(b.HasCompletedPullRequest||age>=Math.Max(180,prefs.BranchCleanupStaleDays*2));}
+ string BranchReason(GitBranch b){if(b.IsDefault)return "Default branch — never recommended for deletion";if(b.IsLocked)return "Locked in Azure DevOps";if(b.HasActivePullRequest)return "Active pull request";if(ProtectedBranchConvention(b))return "Long-lived branch naming convention — review manually";if(b.LastCommitDate is null)return "Last commit date unavailable — review manually";var age=BranchAgeDays(b);if(BranchRecommended(b)&&b.HasCompletedPullRequest)return $"Merged pull-request tip · inactive {age} days";if(BranchRecommended(b))return $"No active PR · inactive {age} days";if(b.HasCompletedPullRequest)return $"Merged pull-request tip · changed {age} days ago";return $"Last activity {age} days ago";}
+ string BranchAgeText(GitBranch b)=>b.LastCommitDate is null?"Unknown":BranchAgeDays(b)==0?"Today":BranchAgeDays(b)==1?"1 day":$"{BranchAgeDays(b)} days";
+ IEnumerable<GitBranch> RecommendedBranches=>branches.Where(BranchRecommended);
+ IEnumerable<GitBranch> VisibleBranches=>branches.Where(b=>branchSearch==""||b.Name.Contains(branchSearch,StringComparison.OrdinalIgnoreCase)||b.Creator.Contains(branchSearch,StringComparison.OrdinalIgnoreCase)||b.LastCommitAuthor.Contains(branchSearch,StringComparison.OrdinalIgnoreCase)||b.LastCommitMessage.Contains(branchSearch,StringComparison.OrdinalIgnoreCase)).Where(b=>branchStatusFilter switch{"recommended"=>BranchRecommended(b),"active"=>b.HasActivePullRequest,"protected"=>b.IsDefault||b.IsLocked||ProtectedBranchConvention(b),"review"=>!BranchRecommended(b),_=>true});
+ List<GitBranch> SelectedBranchRows=>branches.Where(b=>selectedBranches.Contains(b.Name)).ToList();
  List<WorkItem> Visible {get{
   IEnumerable<WorkItem> rows=(quickView=="Carry-over"||cleanupFilter=="Previous-sprint unfinished")?previousItems.Where(w=>!Quality.Finished(w,meta!)):items;
   if(meta is null)return [];
