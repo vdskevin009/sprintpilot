@@ -58,6 +58,7 @@ public sealed class Preferences {
  public Dictionary<string,string> LastTeams {get;set;}=new(StringComparer.OrdinalIgnoreCase);
  public int BranchCleanupStaleDays {get;set;}=90;
  public int PullRequestCleanupStaleDays {get;set;}=90;
+ public bool RepositoryMonitoringEnabled {get;set;}=true;
  public string[] BlockedTags {get;set;}=["Blocked by External Dependency","Waiting Feedback Business"];
  public Dictionary<string,InitiativeMetadata> InitiativeMetadata {get;set;}=new(StringComparer.OrdinalIgnoreCase);
  public string[] Columns {get;set;}=["Order","ID","Type","Title","Owner","State","Iteration","Estimate","Tags"];
