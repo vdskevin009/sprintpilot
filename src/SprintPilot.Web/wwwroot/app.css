@@ -1120,3 +1120,16 @@ html[data-theme=avd] .workspace-mode-tabs,
 html[data-theme=avd] .detail-save-bar,
 html[data-theme=avd] .order-stepper button{box-shadow:none}
 @media(max-width:700px){.repository-monitor-settings,.detail-edit-grid{grid-template-columns:1fr}.editable-detail-panel{width:100%}.detail-save-bar{align-items:stretch;flex-direction:column}}
+
+.nav-link-button{display:flex;align-items:center;text-decoration:none}
+.pipeline-factory-page{display:flex;flex-direction:column;gap:14px;min-height:100vh;padding:20px 24px 28px;background:var(--bg);color:var(--text)}
+.pipeline-factory-selectors{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px}
+.pipeline-factory-selectors label{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.pipeline-factory-selectors label>span{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.pipeline-factory-selectors select{width:100%}
+.pipeline-factory-summary{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px}
+.pipeline-factory-summary article{display:flex;flex-direction:column;gap:3px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.pipeline-factory-summary article span{font-size:9px;color:var(--muted)}.pipeline-factory-summary article strong{font-size:21px}.pipeline-factory-summary .recommended strong{color:var(--accent)}
+.pipeline-table{min-width:850px}.pipeline-table input[type=text],.pipeline-table td>input:not([type]){width:100%;min-width:220px}.pipeline-table code{font-size:10px}.pipeline-result{display:block;margin-top:4px;max-width:300px}
+html[data-theme=avd] .pipeline-factory-selectors label,html[data-theme=avd] .pipeline-factory-summary article{border-color:#d9e0e7!important;box-shadow:none!important}
+@media(max-width:850px){.pipeline-factory-page{padding:14px}.pipeline-factory-selectors{grid-template-columns:1fr}.pipeline-factory-summary{grid-template-columns:repeat(2,1fr)}}
