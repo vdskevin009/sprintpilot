@@ -42,7 +42,7 @@ The updater refuses to overwrite local changes or update from a branch other tha
 
 Setup checks for the .NET 10 SDK, restores, builds, runs the two test executables, publishes a Release build, saves the port, creates a desktop shortcut where permitted, and opens SprintPilot. It does not provision Azure resources or require administrator privileges. The initial setup takes longer than ordinary launches.
 
-4. Enter the organization **name**, project, and PAT on the welcome screen. Test the connection, then save locally. Select your team in Settings if needed. Team iterations and area paths must already be configured in Azure DevOps.
+4. Enter the organization **name**, project, and PAT on the welcome screen. Test the connection, then save locally. Select your team in Settings if needed. Team iterations and area paths must already be configured in Azure DevOps. SprintPilot remembers the last selected team for each organization/project and restores it on the next launch.
 5. For future use, click the desktop shortcut or run:
 
 ```powershell
@@ -101,6 +101,7 @@ The new **Planning overview** page compares application and initiative tags acro
 - **Creation:** choose an actual project work-item type, apply an editable template, and set title, description, criteria, tags, area, sprint and parent. When a type lacks an acceptance-criteria field, criteria are included in the description and the dialog explains that behavior. Custom required fields outside this form may require the Azure DevOps editor.
 - **Views:** save filters and columns locally. Saved views follow the currently selected sprint. ID and title remain visible.
 - **Cleanup:** find unfinished, unassigned, unestimated, untagged, parentless and stale work, new work late in a sprint, completed parents with unfinished children, and previous-sprint unfinished items. The previous sprint is the previous chronologically sorted configured team iteration. Linked children needed for the completed-parent check are fetched explicitly.
+- **Branch cleanup:** browse accessible Azure DevOps projects and Git repositories, search branches, and review creator, latest commit, age, lock/default status and pull-request signals. The recommended list is deliberately conservative: default, locked, active-PR and long-lived branch names are excluded; stale branches need either a merged-PR tip or a much longer inactive period. Bulk deletion always has a confirmation step and sends the reviewed object ID so Azure DevOps rejects a branch that changed before deletion.
 - **Carry-over:** Prepare next sprint selects unfinished items in the current sprint. Adjust the checkboxes, then choose Sprint → and review the proposed move. Nothing moves automatically.
 - **Demo mode:** explicit, isolated sample workspace. Mutations change only that circuit's in-memory demo data. Reopening/reloading starts a new demo. It never submits demo changes to Azure DevOps.
 
