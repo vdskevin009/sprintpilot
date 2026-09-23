@@ -17,6 +17,9 @@ public interface IWorkTracker {
  Task<IReadOnlyList<AzureProject>> ProjectsAsync(CancellationToken ct=default);
  Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default);
  Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default);
+ Task<IReadOnlyList<string>> PipelineYamlFilesAsync(string project,string repositoryId,string branch,CancellationToken ct=default);
+ Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default);
+ Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default);
  Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default);
  Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default);
  Task<IReadOnlyList<GitPullRequestSignal>> PullRequestSignalsAsync(string project,string repositoryId,CancellationToken ct=default);
@@ -42,3 +45,8 @@ public sealed class BulkEditor(IWorkTracker tracker) {
   });return result.OrderBy(x=>x.Id).ToArray();
  }
 }
+
+
+public sealed record PipelineDefinition(int Id,string Name,string RepositoryId,string YamlPath,string Branch);
+public sealed record PipelineCreateRequest(string Name,string YamlPath);
+public sealed record PipelineCreateResult(string Name,bool Success,int? Id,string? Error);
