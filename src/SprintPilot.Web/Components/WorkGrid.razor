@@ -3,7 +3,7 @@
 @foreach(var column in Columns){<th><button class="sort" @onclick="()=>Sort.InvokeAsync(column)">@column @(SortedBy==column?(Descending?"↓":"↑"):"")</button></th>}
 </tr></thead><tbody>
 @foreach(var w in Items){<tr @key="w.Id" data-work-item-id="@w.Id" @ondragenter="()=>DragOver(w.Id)" @ondragover:preventDefault @ondrop="()=>DropRow(w)" class="@(Selected.Contains(w.Id)?"selected":"") @(Busy.Contains(w.Id)?"saving":"") @(Quality.Finished(w,Meta)?"finished":"") @(Blocked(w)?"blocked":"") @(draggingId==w.Id?"dragging":"") @DropPositionClass(w.Id)">
-<td class="drag-grip-cell"><span class="drag-grip @(!DragEnabled?"disabled":"")" draggable="@DragEnabled" title="@(DragEnabled?"Drag to reorder the sprint":"Sort by Order ascending to reorder")" @onmousedown:stopPropagation="true" @onclick:stopPropagation="true" @ondragstart="()=>BeginDrag(w.Id)" @ondragend="EndDrag" aria-hidden="true">⠿</span></td>
+<td class="drag-grip-cell"><div class="order-controls"><span class="drag-grip @(!CanDrag(w)?"disabled":"")" draggable="@CanDrag(w)" title="@(CanDrag(w)?"Drag to reorder the sprint":"This item cannot be reordered")" @onmousedown:stopPropagation="true" @onclick:stopPropagation="true" @ondragstart="()=>BeginDrag(w)" @ondragend="EndDrag" aria-hidden="true">⠿</span><span class="order-stepper" aria-label="Move work item @w.Id in sprint order"><button type="button" title="Move up" aria-label="Move work item @w.Id up" disabled="@(!CanReorder(w)||Busy.Contains(w.Id))" @onclick:stopPropagation="true" @onclick="()=>MoveOrder.InvokeAsync((w,-1))">↑</button><button type="button" title="Move down" aria-label="Move work item @w.Id down" disabled="@(!CanReorder(w)||Busy.Contains(w.Id))" @onclick:stopPropagation="true" @onclick="()=>MoveOrder.InvokeAsync((w,1))">↓</button></span></div></td>
 <td class="check"><input type="checkbox" aria-label="Select work item @w.Id" checked="@Selected.Contains(w.Id)" @onclick="e=>Select.InvokeAsync((w.Id,e.ShiftKey))"/></td>
 @foreach(var column in Columns){<td class="col-@column.ToLowerInvariant()">
 @switch(column){
@@ -48,14 +48,16 @@ case "Changed":<span class="muted" title="@w.Changed.ToString("u")">@w.Changed.T
 [Parameter]public EventCallback<(WorkItem Item,string Tag)> RemoveTag{get;set;}
 [Parameter]public EventCallback<int> DragStart{get;set;}
 [Parameter]public EventCallback<WorkItem> Drop{get;set;}
+[Parameter]public EventCallback<(WorkItem Item,int Delta)> MoveOrder{get;set;}
+[Parameter]public Func<WorkItem,bool> CanReorder{get;set;}=_=>true;
 int? draggingId,dragOverId;
-bool DragEnabled=>SortedBy=="Order"&&!Descending;
-async Task BeginDrag(int id){if(!DragEnabled)return;draggingId=id;dragOverId=null;await DragStart.InvokeAsync(id);}
-void DragOver(int id){if(DragEnabled&&draggingId is not null&&draggingId!=id)dragOverId=id;}
+bool CanDrag(WorkItem w)=>CanReorder(w)&&!Busy.Contains(w.Id);
+async Task BeginDrag(WorkItem w){if(!CanDrag(w))return;draggingId=w.Id;dragOverId=null;await DragStart.InvokeAsync(w.Id);}
+void DragOver(int id){if(draggingId is not null&&draggingId!=id)dragOverId=id;}
 void EndDrag(){draggingId=null;dragOverId=null;}
 int ItemIndex(int id){for(var i=0;i<Items.Count;i++)if(Items[i].Id==id)return i;return -1;}
 string DropPositionClass(int id){if(dragOverId!=id||draggingId is not {} sourceId||sourceId==id)return "";var sourceIndex=ItemIndex(sourceId);var targetIndex=ItemIndex(id);if(sourceIndex<0||targetIndex<0)return "";return targetIndex>sourceIndex?"drop-target drop-after":"drop-target drop-before";}
-async Task DropRow(WorkItem w){try{if(DragEnabled)await Drop.InvokeAsync(w);}finally{draggingId=null;dragOverId=null;}}
+async Task DropRow(WorkItem w){try{if(draggingId is not null&&CanReorder(w))await Drop.InvokeAsync(w);}finally{draggingId=null;dragOverId=null;}}
 async Task AddTagFromInput(WorkItem w,ChangeEventArgs e){var tag=e.Value?.ToString()?.Trim()??"";if(tag!=""&&!w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase))await AcceptTag.InvokeAsync((w,tag));}
 bool Blocked(WorkItem w)=>w.Tags.Any(t=>BlockedTags.Contains(t,StringComparer.OrdinalIgnoreCase));
 string OwnerValue(WorkItem w)=>Meta.People.FirstOrDefault(p=>p.Id==w.OwnerId)?.UniqueName??w.Owner;
