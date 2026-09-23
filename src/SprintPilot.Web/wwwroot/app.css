@@ -1002,3 +1002,74 @@ html[data-theme=avd] .grid-wrap th{background:#f7f9fb}
 html[data-theme=avd] .grid-wrap td,
 html[data-theme=avd] .grid-wrap th{border-bottom-color:#e1e6eb}
 html[data-theme=avd] button:not(.nav-button):not(.filter-pill):not(.title-button):not(.daily-focus-title){box-shadow:none!important}
+
+
+/* Cross-project branch cleanup. */
+.branch-cleanup-page{display:flex;flex-direction:column;gap:14px;min-height:0;padding:20px 24px 28px}
+.branch-cleanup-heading{margin:0}
+.branch-cleanup-heading p{max-width:820px}
+.branch-cleanup-selectors{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:12px}
+.branch-picker{display:grid;grid-template-columns:1fr;gap:7px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.branch-picker .eyebrow{margin-bottom:0}
+.branch-picker input,.branch-picker select{width:100%}
+.branch-picker small{color:var(--muted);font-size:10px}
+.branch-cleanup-loading{display:flex;align-items:center;gap:10px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.branch-cleanup-loading span{color:var(--muted);font-size:11px}
+.branch-cleanup-summary{display:grid;grid-template-columns:repeat(4,minmax(125px,1fr)) minmax(180px,1.1fr);gap:8px}
+.branch-cleanup-summary article,.branch-cleanup-summary>label{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.branch-cleanup-summary article span,.branch-cleanup-summary>label>small{font-size:9px;color:var(--muted)}
+.branch-cleanup-summary article strong{font-size:21px;line-height:1.1}
+.branch-cleanup-summary article.recommended strong{color:var(--accent)}
+.branch-cleanup-summary>label{font-size:10px;font-weight:600}
+.branch-cleanup-summary select{margin-top:3px}
+.branch-recommendations{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:14px}
+.branch-recommendations>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.branch-recommendations h2{margin:2px 0 3px;font-size:18px}
+.branch-recommendations p{margin:0;max-width:800px;color:var(--muted);font-size:10px;line-height:1.45}
+.branch-recommendation-list{display:grid;gap:5px;margin-top:10px}
+.branch-recommendation-list article{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.branch-recommendation-list article>div{min-width:0}
+.branch-recommendation-list strong,.branch-recommendation-list small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.branch-recommendation-list strong{font-size:11px}.branch-recommendation-list small{font-size:9px;color:var(--muted);margin-top:2px}
+.branch-recommendation-list article>span{font-size:10px;color:var(--muted);white-space:nowrap}
+.branch-toolbar{display:grid;grid-template-columns:minmax(230px,1fr) auto auto;gap:8px;align-items:center}
+.branch-toolbar>.search{width:100%;min-width:0}
+.branch-filter-pills{display:flex;gap:4px;overflow-x:auto;scrollbar-width:thin}
+.branch-filter-pills button{padding:6px 9px;font-size:9px;border-radius:999px;white-space:nowrap}
+.branch-filter-pills button.active{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.branch-selection-actions{justify-content:flex-end;white-space:nowrap}
+.branch-selection-actions>span{font-size:10px;color:var(--muted)}
+.branch-table-wrap{min-height:180px;overflow:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.branch-table{width:100%;border-collapse:collapse;min-width:1040px}
+.branch-table th{position:sticky;top:0;z-index:2;text-align:left;padding:8px 9px;background:var(--bg);border-bottom:1px solid var(--border);font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.branch-table td{padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:10px}
+.branch-table tbody tr:last-child td{border-bottom:0}
+.branch-table tbody tr:hover{background:var(--hover)}
+.branch-table tbody tr.recommended-row{background:var(--accent-bg)}
+.branch-table tbody tr.recommended-row:hover{background:var(--accent-bg)}
+.branch-table td>strong,.branch-table td>small{display:block;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.branch-table td>strong{font-size:10px}.branch-table td>small{font-size:9px;color:var(--muted);margin-top:2px}
+.branch-table .branch-check{width:48px;text-align:center}
+.branch-table .branch-check input{width:auto}
+.branch-reason{max-width:250px!important;white-space:normal!important;line-height:1.3}
+.branch-badge{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:2px 6px;font-size:8px;font-weight:700;white-space:nowrap}
+.branch-badge.recommended{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.branch-badge.review{color:var(--muted);background:var(--bg)}
+.branch-badge.active-pr{color:var(--text);background:var(--hover)}
+.branch-badge.merged{color:var(--accent);background:var(--accent-bg)}
+.danger-action{font-weight:700}
+.branch-delete-review{display:grid;gap:6px;max-height:380px;overflow:auto;margin:10px 0}
+.branch-delete-review article{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.branch-delete-review strong,.branch-delete-review small{display:block}
+.branch-delete-review small{margin-top:2px;color:var(--muted);font-size:9px}
+.branch-delete-review article>span{font-size:10px;color:var(--muted)}
+.branch-delete-results{max-height:220px;overflow:auto;margin:8px 0}
+.branch-delete-results p{margin:4px 0}
+@media(max-width:1150px){.branch-cleanup-summary{grid-template-columns:repeat(3,1fr)}.branch-toolbar{grid-template-columns:1fr}.branch-selection-actions{justify-content:flex-start}}
+@media(max-width:760px){.branch-cleanup-page{padding:14px}.branch-cleanup-selectors{grid-template-columns:1fr}.branch-cleanup-summary{grid-template-columns:repeat(2,1fr)}.branch-recommendations>header{flex-direction:column}.branch-recommendation-list article{grid-template-columns:minmax(0,1fr) auto}.branch-recommendation-list article>button{grid-column:1 / -1}.branch-cleanup-summary>label{grid-column:1 / -1}}
+
+html[data-theme=avd] .branch-picker,
+html[data-theme=avd] .branch-recommendations,
+html[data-theme=avd] .branch-cleanup-summary article,
+html[data-theme=avd] .branch-cleanup-summary>label,
+html[data-theme=avd] .branch-table-wrap{border-color:#d9e0e7!important;box-shadow:none!important}
