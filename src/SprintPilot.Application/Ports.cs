@@ -19,6 +19,7 @@ public interface IWorkTracker {
  Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default);
  Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default);
  Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default);
+ Task<IReadOnlyList<GitPullRequestSignal>> PullRequestSignalsAsync(string project,string repositoryId,CancellationToken ct=default);
  Task<IReadOnlyList<PullRequestAbandonResult>> AbandonPullRequestsAsync(string project,string repositoryId,IReadOnlyList<PullRequestAbandonRequest> pullRequests,CancellationToken ct=default);
  Task<IReadOnlyList<WorkItem>> PlanningAsync(string[] types,CancellationToken ct=default);
  Task<WorkItem> GetAsync(int id,CancellationToken ct=default);
