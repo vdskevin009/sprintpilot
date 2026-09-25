@@ -56,6 +56,7 @@ public sealed class Preferences {
  public int Version {get;set;}
  public Dictionary<string,PlanningSettings> PlanningProfiles {get;set;}=new();
  public string Theme {get;set;}="system";
+ public bool ThemePersisted {get;set;}
  public Dictionary<string,string> LastTeams {get;set;}=new(StringComparer.OrdinalIgnoreCase);
  public int BranchCleanupStaleDays {get;set;}=90;
  public int PullRequestCleanupStaleDays {get;set;}=90;

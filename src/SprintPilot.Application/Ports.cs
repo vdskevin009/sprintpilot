@@ -7,6 +7,7 @@ public interface ICredentialStore {
 public interface IPreferencesStore {
  Task<Preferences> LoadAsync(CancellationToken ct=default);
  Task SaveAsync(Preferences preferences,CancellationToken ct=default);
+ Task SaveThemeAsync(string theme,CancellationToken ct=default);
 }
 public interface IWorkTracker {
  Task<Person> TestAsync(Credentials credentials,CancellationToken ct=default);

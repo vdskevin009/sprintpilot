@@ -17,6 +17,8 @@ jobs:
       - run: dotnet publish src/SprintPilot.Web -c Release --no-self-contained -o artifacts/publish
       - name: Verify browser JavaScript syntax
         run: node --check src/SprintPilot.Web/wwwroot/app.js
+      - name: Verify theme persistence
+        run: node tests/browser/theme.cjs
       - name: Verify PowerShell syntax
         shell: pwsh
         run: |

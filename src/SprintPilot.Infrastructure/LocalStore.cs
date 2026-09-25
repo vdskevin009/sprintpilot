@@ -10,6 +10,17 @@ public static class LocalPaths {
  public static async Task WriteAsync<T>(string name,T value,CancellationToken ct=default){var path=File(name);var temp=path+"."+Guid.NewGuid()+".tmp";try{await System.IO.File.WriteAllTextAsync(temp,JsonSerializer.Serialize(value,new JsonSerializerOptions{WriteIndented=true}),ct);if(!OperatingSystem.IsWindows())System.IO.File.SetUnixFileMode(temp,UnixFileMode.UserRead|UnixFileMode.UserWrite);System.IO.File.Move(temp,path,true);}finally{if(System.IO.File.Exists(temp))System.IO.File.Delete(temp);}}
 }
 public sealed class PreferencesStore:IPreferencesStore {
+ public async Task SaveThemeAsync(string theme,CancellationToken ct=default){
+  if(theme is not ("system" or "dark" or "light" or "avd"))throw new TrackerException("Choose a valid theme.");
+  await gate.WaitAsync(ct);
+  try{
+   var path=LocalPaths.File("preferences.json");
+   var saved=System.IO.File.Exists(path)?JsonSerializer.Deserialize<Preferences>(await System.IO.File.ReadAllTextAsync(path,ct))??new():new();
+   saved.Theme=theme;saved.ThemePersisted=true;
+   await LocalPaths.WriteAsync("preferences.json",saved,ct);
+  }finally{gate.Release();}
+ }
+
  private readonly SemaphoreSlim gate=new(1,1);
  public async Task<Preferences> LoadAsync(CancellationToken ct=default){await gate.WaitAsync(ct);try{var path=LocalPaths.File("preferences.json");var p=System.IO.File.Exists(path)?JsonSerializer.Deserialize<Preferences>(await System.IO.File.ReadAllTextAsync(path,ct))??new():new();if(p.AiPrompt=="")p.AiPrompt=AiReview.DefaultPrompt;if(p.Version<2){p.Columns=["Order",..p.Columns.Where(c=>c!="Order")];p.Version=2;await LocalPaths.WriteAsync("preferences.json",p,ct);}return p;}catch(JsonException){throw new TrackerException("Local preferences are invalid. Rename preferences.json in your local SprintPilot folder and restart.");}finally{gate.Release();}}
  public async Task SaveAsync(Preferences p,CancellationToken ct=default){await gate.WaitAsync(ct);try{await LocalPaths.WriteAsync("preferences.json",p,ct);}finally{gate.Release();}}
