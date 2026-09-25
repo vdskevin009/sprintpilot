@@ -59,6 +59,15 @@ else if(meta is null){
 else if(screen=="home"){
 <section class="orchestration-home">
 <div class="page-heading home-heading"><div><div class="heading-context">@meta.Teams.FirstOrDefault(t=>t.Id==connection?.Team)?.Name · @CurrentSprint?.Name</div><h1>Home</h1><p>Orchestrate what still needs attention. Completed work stays out of the way.</p></div><div class="toolbar home-actions">@if(!pwaInstalled){<button class="install-app-button @(pwaInstallAvailable?"ready":"")" title="Install SprintPilot as a Progressive Web App" @onclick="InstallPwa">⊕ Install app</button>}@if(appUpdateChecking){<button disabled>Checking update…</button>}else if(appUpdateAvailable&&appUpdateSupported){<button class="update-app-button" title="@appUpdateText" disabled="@appUpdating" @onclick="StartAppUpdate">@(appUpdating?"Updating…":"↑ Update")</button>}<button class="magic-orchestration-trigger" disabled="@loading" @onclick="PrepareMagicOrchestration">✨ Magic Orchestration</button><button disabled="@loading" @onclick="Refresh">↻ Refresh</button><button @onclick='()=>SetWorkspaceMode("Daily")'>Open Sprint Daily →</button></div></div>
+<section class="home-card quick-add-pbi-card" aria-label="Quick add PBI">
+<header><div><span class="eyebrow">Quick add</span><h2>New PBI</h2></div>@if(quickPbiCreatedId is not null){<span class="quick-add-created">✓ #@quickPbiCreatedId created</span>}</header>
+<div class="quick-add-pbi-form">
+<label class="quick-add-title"><span>Title</span><input maxlength="255" placeholder="What needs to be done?" @bind="quickPbiTitle" @bind:event="oninput" disabled="@quickPbiCreating"/></label>
+<label><span>Sprint</span><select value="@QuickPbiIterationPath" @onchange="QuickPbiSprintChanged" disabled="@quickPbiCreating">@foreach(var sprint in meta.Iterations){<option value="@sprint.Path">@sprint.Name</option>}</select></label>
+<button class="primary quick-add-submit" disabled="@(quickPbiCreating||string.IsNullOrWhiteSpace(quickPbiTitle)||string.IsNullOrWhiteSpace(QuickPbiIterationPath))" @onclick="CreateQuickPbi">@(quickPbiCreating?"Creating…":"+ Add PBI")</button>
+</div>
+@if(quickPbiError!=""){<p class="quick-add-error">@quickPbiError</p>}
+</section>
 <div class="home-layout">
 <section class="home-card attention-card"><header><div><span class="eyebrow">Now</span><h2>Needs attention</h2></div><span class="home-card-count">@HomeAttention().Sum(x=>x.Count)</span></header>
 @if(repositoryMonitoringLoading){<div class="repository-monitor-status">Reviewing project repositories…</div>}else if(repositoryMonitoringError!=""){<div class="repository-monitor-status muted">Repository scan partial · @repositoryMonitoringError</div>}
