@@ -1,13 +1,20 @@
 @inject TrackerSession Tracker
+@inject SprintPilot.Infrastructure.PipelineApprovalSelectionStore SelectionStore
 @implements IDisposable
 
 <section class="home-card pipeline-approvals" aria-label="Pipeline approvals">
-<header><div><h2>Pipeline approvals <span class="home-card-count">@rows.Count</span></h2><small>@Project · stages awaiting approval</small></div><button disabled="@(loading||approving)" @onclick="Load">↻ Refresh</button></header>
+<header><div><h2>Pipeline approvals <span class="home-card-count">@rows.Count</span></h2><small>Stages awaiting approval</small></div><button disabled="@(loading||approving)" @onclick="RefreshApprovals">↻ Refresh</button></header>
+<label class="pipeline-project-picker">Project
+<select aria-label="Pipeline approvals project" value="@selectedProjectId" disabled="@(loading||approving||projects.Count==0)" @onchange="ChangeProject">
+@if(projects.Count==0){<option value="">No projects available</option>}
+@foreach(var project in projects){<option value="@project.Id">@project.Name</option>}
+</select></label>
+@if(selectionNotice!=""){<p class="pipeline-approval-message" role="status">@selectionNotice</p>}
 @if(loading){<p class="pipeline-approval-message" role="status">Loading pending approvals…</p>}
 @if(error!=""){<p class="pipeline-approval-message error-text" role="alert">@error</p>}
 @if(warning!=""){<p class="pipeline-approval-message">@warning</p>}
 @if(message!=""){<p class="pipeline-approval-message" role="status">@message</p>}
-@if(!loading&&error==""&&rows.Count==0){<div class="home-empty">No stages awaiting approval.</div>}
+@if(!loading&&error==""&&projects.Count>0&&rows.Count==0){<div class="home-empty">No stages awaiting approval.</div>}
 @foreach(var row in rows){
 <article class="pipeline-approval-row" @key="row.Id">
 <div class="pipeline-approval-context"><strong>@row.Pipeline @if(row.Run!=""){<small>Run @row.Run</small>}</strong><span class="pipeline-approval-stage">@row.Stage</span>@if(row.Instructions!=""){<small>@row.Instructions</small>}</div>
@@ -19,17 +26,47 @@
 
 @code {
  [Parameter] public string Project{get;set;}="";
- string loadedProject="",error="",warning="",message="",approvingId="";
+ [Parameter] public string Organization{get;set;}="";
+ string selectedProjectId="",selectionNotice="",error="",warning="",message="",approvingId="";
  bool loading,approving,disposed;
+ List<AzureProject> projects=[];
  List<PipelineApproval> rows=[];
  readonly CancellationTokenSource lifetime=new();
- protected override async Task OnParametersSetAsync(){if(Project!=loadedProject){loadedProject=Project;message="";await Load();}}
- public Task RefreshApprovals()=>Load();
+ protected override Task OnInitializedAsync()=>RefreshApprovals();
+ public async Task RefreshApprovals(){
+  if(loading||approving||disposed)return;
+  loading=true;error="";rows=[];warning="";
+  try{
+   projects=(await Tracker.ProjectsAsync(lifetime.Token)).OrderBy(p=>p.Name,StringComparer.OrdinalIgnoreCase).ToList();
+   var remembered=selectedProjectId!=""?selectedProjectId:Tracker.Demo?null:await SelectionStore.LoadAsync(Organization,lifetime.Token);
+   var chosen=projects.FirstOrDefault(p=>p.Id.Equals(remembered,StringComparison.OrdinalIgnoreCase));
+   if(chosen is null){
+    chosen=projects.FirstOrDefault(p=>p.Id.Equals(Project,StringComparison.OrdinalIgnoreCase)||p.Name.Equals(Project,StringComparison.OrdinalIgnoreCase))??projects.FirstOrDefault();
+    if(!string.IsNullOrEmpty(remembered))selectionNotice="The saved project is no longer accessible. Choose an available project.";
+   }
+   selectedProjectId=chosen?.Id??"";
+  }catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch(Exception e){error=e is TrackerException?e.Message:"Projects or the saved selection could not be loaded. Refresh to try again.";}
+  finally{loading=false;}
+  if(error==""&&selectedProjectId!="")await Load();
+ }
+ async Task ChangeProject(ChangeEventArgs e){
+  if(loading||approving||disposed)return;
+  var id=e.Value?.ToString()??"";
+  if(!projects.Any(p=>p.Id==id))return;
+  selectedProjectId=id;message="";selectionNotice="";rows=[];
+  loading=true;
+  try{if(!Tracker.Demo)await SelectionStore.SaveAsync(Organization,id,lifetime.Token);}
+  catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch{selectionNotice="This project is selected, but could not be saved for next time.";}
+  finally{loading=false;}
+  await Load();
+ }
  async Task Load(){
-  if(loading||disposed)return;
+  if(loading||disposed||selectedProjectId=="")return;
   loading=true;error="";warning="";rows=[];
-  var project=Project;
-  try{var result=await Tracker.PendingPipelineApprovalsAsync(project,lifetime.Token);if(project==Project){rows=result.Items.ToList();warning=result.Warning;}}
+  var project=selectedProjectId;
+  try{var result=await Tracker.PendingPipelineApprovalsAsync(project,lifetime.Token);if(project==selectedProjectId){rows=result.Items.ToList();warning=result.Warning;}}
   catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
   catch(Exception e){error=e is TrackerException?e.Message:"Pending approvals could not be loaded. Check Build read and Pipeline Resources permissions, then refresh.";}
   finally{loading=false;}
@@ -38,7 +75,7 @@
   if(loading||approving||!row.CanApprove)return;
   approving=true;approvingId=row.Id;message="";error="";
   try{
-   await Tracker.ApprovePipelineAsync(Project,row.Id,lifetime.Token);
+   await Tracker.ApprovePipelineAsync(selectedProjectId,row.Id,lifetime.Token);
    message=$"Approval recorded for {row.Pipeline} · {row.Stage}. Other checks or approvers may still be pending.";
    await Load();
   }catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}

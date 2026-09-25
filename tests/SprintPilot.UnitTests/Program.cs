@@ -4,6 +4,20 @@ using SprintPilot.Infrastructure;
 int checks=0;
 void Check(bool condition,string label){if(!condition)throw new Exception("FAIL: "+label);checks++;Console.WriteLine("PASS: "+label);}
 void Reject(Action action,string label){try{action();}catch(TrackerException){Check(true,label);return;}throw new Exception("Expected rejection: "+label);}
+var approvalPreferenceDirectory=Path.Combine(Path.GetTempPath(),"sprintpilot-project-test-"+Guid.NewGuid());
+try{
+ var preferencePath=Path.Combine(approvalPreferenceDirectory,"pipeline-approval-projects.json");
+ var selectionStore=new PipelineApprovalSelectionStore(preferencePath);
+ Check(await selectionStore.LoadAsync("org-a") is null,"Approval project starts unset");
+ await selectionStore.SaveAsync("org-a","project-one");
+ await selectionStore.SaveAsync("org-b","project-two");
+ var restartedStore=new PipelineApprovalSelectionStore(preferencePath);
+ Check(await restartedStore.LoadAsync("ORG-A")=="project-one","Approval project survives restart and organization casing");
+ Check(await restartedStore.LoadAsync("org-b")=="project-two","Approval project choices remain isolated by organization");
+ await restartedStore.SaveAsync("org-a","project-three");
+ Check(await new PipelineApprovalSelectionStore(preferencePath).LoadAsync("org-a")=="project-three","Latest approval project is persisted");
+ Check(await restartedStore.LoadAsync("org-b")=="project-two","Changing one approval project preserves other organizations");
+}finally{if(Directory.Exists(approvalPreferenceDirectory))Directory.Delete(approvalPreferenceDirectory,true);}
 string Review(int id)=>$"=== WORK ITEM {id} ===\nTITLE:\nImprove timeout diagnostics\nDESCRIPTION:\nPreserve existing behavior.\nACCEPTANCE CRITERIA:\n- Existing scenarios pass.\nTECHNICAL NOTES:\nUse the existing handler.\nTESTING:\n- Run regression tests.\nTAGS:\nAPI; Reliability\nQUESTIONS / MISSING INFORMATION:\n- Which timeout threshold applies?\n=== END WORK ITEM {id} ===";
 var parsed=AiReview.Parse(Review(1)+"\n\n"+Review(2),[1,2]);Check(parsed.Length==2&&parsed[1].Id==2,"Batch IDs map exactly");
 Reject(()=>AiReview.Parse(Review(1)+"\n"+Review(1),[1]),"Duplicate IDs rejected");
