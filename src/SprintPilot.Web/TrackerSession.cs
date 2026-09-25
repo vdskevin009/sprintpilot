@@ -15,6 +15,8 @@ public sealed class TrackerSession(AzureTracker azure,DemoTracker demo):IWorkTra
  public Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default)=>Active.RepositoriesAsync(project,ct);
  public Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default)=>Active.BranchesAsync(project,repositoryId,ct);
  public Task<IReadOnlyList<string>> PipelineYamlFilesAsync(string project,string repositoryId,string branch,CancellationToken ct=default)=>Active.PipelineYamlFilesAsync(project,repositoryId,branch,ct);
+ public Task<PipelineApprovalList> PendingPipelineApprovalsAsync(string project,CancellationToken ct=default)=>Active.PendingPipelineApprovalsAsync(project,ct);
+ public Task ApprovePipelineAsync(string project,string approvalId,CancellationToken ct=default)=>Active.ApprovePipelineAsync(project,approvalId,ct);
  public Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default)=>Active.PipelinesAsync(project,ct);
  public Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default)=>Active.CreatePipelinesAsync(project,repositoryId,branch,pipelines,ct);
  public Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default)=>Active.DeleteBranchesAsync(project,repositoryId,branches,ct);

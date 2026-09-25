@@ -187,3 +187,11 @@ The script securely prompts for the PAT, performs read-only project and identity
 - Console diagnostics: from `artifacts\publish`, run `dotnet .\SprintPilot.Web.dll` temporarily. It still enforces local session access. Do not enable HTTP body or credential logging.
 
 Microsoft references: [revision-checked work-item updates](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/update?view=azure-devops-rest-7.1), [200-item batch reads](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-items-batch?view=azure-devops-rest-7.1), [team iterations](https://learn.microsoft.com/en-us/rest/api/azure/devops/work/iterations/list?view=azure-devops-rest-7.1), [process-specific work-item definitions](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-types/get?view=azure-devops-rest-7.1).
+
+### Pending pipeline approvals
+
+Home shows pending YAML/build pipeline resource approvals for the connected project, including the run and stage. Use **Approve** on the relevant row; SprintPilot rechecks that the approval is pending and that Azure DevOps grants your account update permission, submits once, then reloads the list. Multiple approvers/checks can keep a stage pending after your approval.
+
+The PAT needs Build read access for run/timeline details and the permissions/scopes required by Azure DevOps to approve protected resources (Build read & execute / Pipeline Resources use). SprintPilot does not elevate permissions. Classic Release approvals and ManualValidation tasks are not covered by this resource-approval view. Missing stage details remain visible with a link to Azure DevOps and direct approval disabled.
+
+API references: [Approval query](https://learn.microsoft.com/en-us/rest/api/azure/devops/approvalsandchecks/approvals/query?view=azure-devops-rest-7.1), [Approval update](https://learn.microsoft.com/en-us/rest/api/azure/devops/approvalsandchecks/approvals/update?view=azure-devops-rest-7.1), [Build timeline](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/timeline/get?view=azure-devops-rest-7.1).

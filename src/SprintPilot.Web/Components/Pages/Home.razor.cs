@@ -10,7 +10,7 @@ namespace SprintPilot.Web.Components.Pages;
 public partial class Home {
  [Inject] public HttpClient Http {get;set;}=default!;
  [Inject] public NavigationManager Navigation {get;set;}=default!;
- PlanningPage? planner;
+ PlanningPage? planner;PipelineApprovals? pipelineApprovals;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
  bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,quickPbiCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
@@ -132,7 +132,7 @@ public partial class Home {
  async Task LoadRelated(CancellationToken ct){var ids=items.Where(w=>Quality.Finished(w,meta!)).SelectMany(w=>w.Children).Except(AllLoaded.Select(w=>w.Id)).ToArray();var list=new List<WorkItem>();foreach(var id in ids)list.Add(await Tracker.GetAsync(id,ct));related=list;}
  async Task Navigate(int delta){if(busy.Count>0||applying)return;var next=sprintIndex+delta;if(meta is null||next<0||next>=meta.Iterations.Length)return;sprintIndex=next;selected.Clear();selectionAnchor=-1;detail=null;cleanupFilter="";await LoadSprint();}
  async Task ChooseSprint(Iteration iteration){if(busy.Count>0||applying)return;sprintIndex=Array.IndexOf(meta!.Iterations,iteration);selected.Clear();detail=null;CloseDialog();await LoadSprint();}
- async Task Refresh(){if(screen=="planning"&&planner is not null){await planner.RefreshPlanning();return;}if(screen=="branches"){if(branchRepositoryId=="")await LoadBranchProjects();else await LoadBranches();return;}if(screen=="pullrequests"){if(pullRequestRepositoryId=="")await LoadPullRequestProjects();else await LoadPullRequests();return;}if(busy.Count>0||applying)return;sprintCache.Clear();capacityByIteration.Clear();await LoadSprint(true);await LoadFutureCapacities(lifetime.Token);await LoadPlanningItems(lifetime.Token);await LoadCalendarHolidays(lifetime.Token);await LoadRepositoryAttention(lifetime.Token);if(detail is not null)await OpenById(detail.Id);}
+ async Task Refresh(){if(screen=="planning"&&planner is not null){await planner.RefreshPlanning();return;}if(screen=="branches"){if(branchRepositoryId=="")await LoadBranchProjects();else await LoadBranches();return;}if(screen=="pullrequests"){if(pullRequestRepositoryId=="")await LoadPullRequestProjects();else await LoadPullRequests();return;}if(busy.Count>0||applying)return;sprintCache.Clear();capacityByIteration.Clear();await LoadSprint(true);await LoadFutureCapacities(lifetime.Token);await LoadPlanningItems(lifetime.Token);await LoadCalendarHolidays(lifetime.Token);await LoadRepositoryAttention(lifetime.Token);if(pipelineApprovals is not null)await pipelineApprovals.RefreshApprovals();if(detail is not null)await OpenById(detail.Id);}
  async Task SetQuickView(string view){quickView=view;cleanupFilter="";if(view=="Carry-over"){loading=true;try{await LoadPrevious(refreshToken.Token);}catch(Exception e){Error(e);}finally{loading=false;}}}
  void ClearFilters(){search=ownerSearch=stateFilter=typeFilter=tagFilter=applicationFilter=areaFilter=priorityFilter=cleanupFilter=attentionFilter=filterOptionSearch="";workspaceActiveOnly=workspaceBlockedOnly=workspaceOwnerMode=false;workspacePriorityOwner=null;ownerFilters.Clear();cleanupTagFilters.Clear();quickView="Team";}
  void ToggleOwner(string id){if(screen=="workspace"&&workspaceOwnerMode){SetWorkspacePriorityOwner(id);return;}if(!ownerFilters.Add(id))ownerFilters.Remove(id);}
@@ -317,6 +317,7 @@ public partial class Home {
  async Task OpenSprintPerson(Iteration iteration,string id){if(meta is null)return;var index=Array.IndexOf(meta.Iterations,iteration);if(index<0)return;sprintIndex=index;ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="Overview";sort="Order";descending=false;detail=null;dailyPanelItem=null;await LoadSprint();}
  void OpenGroup(string tag){ClearFilters();if(ApplicationTags().Contains(tag,StringComparer.OrdinalIgnoreCase))applicationFilter=tag;else tagFilter=tag;screen="workspace";workspaceMode="Overview";detail=null;dailyPanelItem=null;}
  void QuickPbiSprintChanged(ChangeEventArgs e){quickPbiIteration=e.Value?.ToString()??"";quickPbiError="";quickPbiCreatedId=null;}
+ async Task CreateWorkspacePbi(){quickPbiIteration=CurrentSprint?.Path??"";await CreateQuickPbi();}
  async Task CreateQuickPbi(){
   if(quickPbiCreating||meta is null)return;
   quickPbiError="";quickPbiCreatedId=null;

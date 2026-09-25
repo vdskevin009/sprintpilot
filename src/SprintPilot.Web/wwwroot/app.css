@@ -1156,3 +1156,30 @@ html[data-theme=avd] .quick-add-pbi-card{border-color:#d9e0e7!important;box-shad
 .sprint-workspace .active-filter-summary:not(:empty){padding:8px 0}
 .sprint-workspace .filter-primary{align-items:center;gap:8px}
 .sprint-workspace .filter-primary .search{min-width:180px}
+
+/* Dense sprint workspace: context, quick entry, then one primary control row. */
+.sprint-workspace .workspace-context-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.sprint-workspace .workspace-context-row .sprint-bar{margin:0;flex:1;max-width:720px}
+.sprint-workspace .workspace-context-row .current-sprint{padding:6px 12px;font-size:14px}
+.workspace-quick-add{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+.workspace-quick-add input{flex:1;max-width:520px}
+.workspace-quick-add span{font-size:12px;color:var(--muted)}
+.sprint-workspace .filter-primary .workspace-mode-tabs{margin:0;padding:2px;flex-shrink:0}
+.sprint-workspace .filter-primary .search{flex:0 1 280px;min-width:160px}
+.sprint-workspace .grid-wrap .tag-editor{flex-direction:row;align-items:center;gap:8px;min-width:0}
+.sprint-workspace .grid-wrap .tag-current,.sprint-workspace .grid-wrap .tag-add-row{flex-wrap:nowrap;flex-shrink:0}
+.sprint-workspace .grid-wrap .tag-add-input{width:112px}
+.pipeline-approvals{margin-bottom:16px}
+.pipeline-approvals header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pipeline-approvals h2{margin:0}
+.pipeline-approval-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
+.pipeline-approval-context{flex:1;min-width:0}
+.pipeline-approval-context strong,.pipeline-approval-context small{display:block;overflow-wrap:anywhere}
+.pipeline-approval-stage{font-weight:600;color:var(--accent)}
+.pipeline-approval-message{font-size:12px;padding:8px 0}
+@media(max-width:800px){
+ .sprint-workspace .filter-primary{flex-wrap:wrap}
+ .sprint-workspace .filter-primary .search{flex:1 1 160px}
+ .workspace-quick-add{flex-wrap:wrap}.workspace-quick-add span{display:none}
+ .pipeline-approval-row{flex-wrap:wrap}.pipeline-approval-context{flex-basis:100%}
+}
