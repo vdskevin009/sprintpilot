@@ -190,7 +190,7 @@ Microsoft references: [revision-checked work-item updates](https://learn.microso
 
 ### Pending pipeline approvals
 
-Home shows pending YAML/build pipeline resource approvals for the connected project, including the run and stage. Use **Approve** on the relevant row; SprintPilot rechecks that the approval is pending and that Azure DevOps grants your account update permission, submits once, then reloads the list. Multiple approvers/checks can keep a stage pending after your approval.
+Home shows pending YAML/build pipeline resource approvals for the project selected in its Project dropdown, including the run and stage. The dropdown lists accessible projects in the connected organization, independently of the sprint project. Each selection is saved immediately by organization in the local user profile and restored after restarts and updates. If a saved project is no longer accessible, the card explains the fallback and lets you select another project. Use **Approve** on the relevant row; SprintPilot rechecks that the approval is pending and that Azure DevOps grants your account update permission, submits once, then reloads the list. Multiple approvers/checks can keep a stage pending after your approval.
 
 The PAT needs Build read access for run/timeline details and the permissions/scopes required by Azure DevOps to approve protected resources (Build read & execute / Pipeline Resources use). SprintPilot does not elevate permissions. Classic Release approvals and ManualValidation tasks are not covered by this resource-approval view. Missing stage details remain visible with a link to Azure DevOps and direct approval disabled.
 

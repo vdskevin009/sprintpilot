@@ -1183,3 +1183,7 @@ html[data-theme=avd] .quick-add-pbi-card{border-color:#d9e0e7!important;box-shad
  .workspace-quick-add{flex-wrap:wrap}.workspace-quick-add span{display:none}
  .pipeline-approval-row{flex-wrap:wrap}.pipeline-approval-context{flex-basis:100%}
 }
+
+.pipeline-approvals .pipeline-project-picker{display:flex;flex-direction:row;align-items:center;gap:10px;margin:12px 0;font-size:13px}
+.pipeline-approvals .pipeline-project-picker select{width:320px;max-width:100%}
+@media(max-width:600px){.pipeline-approvals .pipeline-project-picker{align-items:flex-start;flex-direction:column}}

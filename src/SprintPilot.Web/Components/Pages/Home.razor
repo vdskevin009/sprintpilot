@@ -68,7 +68,7 @@ else if(screen=="home"){
 </div>
 @if(quickPbiError!=""){<p class="quick-add-error">@quickPbiError</p>}
 </section>
-<PipelineApprovals @ref="pipelineApprovals" @key="connection?.Project" Project="@(connection?.Project??"Demo")"/>
+<PipelineApprovals @ref="pipelineApprovals" @key="connection?.Organization" Organization="@(connection?.Organization??"demo")" Project="@(connection?.Project??"SprintPilot")"/>
 <div class="home-layout">
 <section class="home-card attention-card"><header><div><span class="eyebrow">Now</span><h2>Needs attention</h2></div><span class="home-card-count">@HomeAttention().Sum(x=>x.Count)</span></header>
 @if(repositoryMonitoringLoading){<div class="repository-monitor-status">Reviewing project repositories…</div>}else if(repositoryMonitoringError!=""){<div class="repository-monitor-status muted">Repository scan partial · @repositoryMonitoringError</div>}

@@ -17,6 +17,7 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents(o=>{o.Detai
 builder.Services.AddScoped<ICredentialStore,CredentialStore>();builder.Services.AddSingleton<IPreferencesStore,PreferencesStore>();
 builder.Services.AddSingleton<ITrackerAuthentication,PatAuthentication>();
 builder.Services.AddScoped(_=>new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(45)});
+builder.Services.AddSingleton(_=>new PipelineApprovalSelectionStore());
 builder.Services.AddScoped<AzureTracker>();builder.Services.AddScoped<DemoTracker>();builder.Services.AddScoped<TrackerSession>();builder.Services.AddScoped<IWorkTracker>(s=>s.GetRequiredService<TrackerSession>());builder.Services.AddScoped<BulkEditor>();
 var app=builder.Build();
 var key=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));var session=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));var cookie="SprintPilotSession"+port;
