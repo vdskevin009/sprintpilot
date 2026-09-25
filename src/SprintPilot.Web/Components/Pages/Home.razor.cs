@@ -13,7 +13,7 @@ public partial class Home {
  PlanningPage? planner;PipelineApprovals? pipelineApprovals;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
- bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,quickPbiCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
+ bool themeRestored;bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,quickPbiCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
  bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported,branchCleanupLoading,branchDeleting,pullRequestCleanupLoading,pullRequestAbandoning;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";string? workspacePriorityOwner;
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
@@ -95,9 +95,18 @@ public partial class Home {
  string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item","smartorder"=>"Smart order preview","smartfix"=>"Smart Fix","magic"=>"Magic Orchestration","branchdelete"=>"Review branch deletion","prabandon"=>"Review pull request cleanup",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
  protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
- protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);await RestoreTheme();_=CheckForAppUpdate();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}if(pendingOrderHighlightId is {} movedId){pendingOrderHighlightId=null;await JS.InvokeVoidAsync("sprintPilot.orderDropSuccess",movedId);}}
+ protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);_=CheckForAppUpdate();}if(!initializing&&!themeRestored){themeRestored=true;await RestoreTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}if(pendingOrderHighlightId is {} movedId){pendingOrderHighlightId=null;await JS.InvokeVoidAsync("sprintPilot.orderDropSuccess",movedId);}}
  async Task ApplyTheme()=>await JS.InvokeVoidAsync("sprintPilot.theme",prefs.Theme,true);
- async Task RestoreTheme(){var effective=await JS.InvokeAsync<string>("sprintPilot.theme",prefs.Theme,false);if(prefs.Theme=="system"&&effective is "light" or "dark" or "avd")prefs.Theme=effective;}
+ async Task SaveTheme(){
+  try{await Preferences.SaveThemeAsync(prefs.Theme,lifetime.Token);prefs.ThemePersisted=true;await ApplyTheme();}
+  catch(Exception e){Error(e);}
+ }
+ async Task RestoreTheme(){
+  try{
+   prefs.Theme=await JS.InvokeAsync<string>("sprintPilot.restoreTheme",prefs.Theme,prefs.ThemePersisted);
+   if(!prefs.ThemePersisted){await Preferences.SaveThemeAsync(prefs.Theme,lifetime.Token);prefs.ThemePersisted=true;}
+  }catch(Exception e){Error(e);}
+ }
  [JSInvokable] public async Task PwaInstallStateChanged(bool available,bool installed){pwaInstallAvailable=available;pwaInstalled=installed;if(!disposed)await InvokeAsync(StateHasChanged);}
  async Task InstallPwa(){try{var result=await JS.InvokeAsync<string>("sprintPilot.installPwa");switch(result){case "accepted":Notify("SprintPilot installation was accepted. Edge will finish adding the app.");break;case "dismissed":Notify("SprintPilot installation was cancelled.");break;case "installed":pwaInstalled=true;Notify("SprintPilot is already installed as an app.");break;default:Notify("Edge is not offering the PWA install prompt. Check Edge > Apps > Install SprintPilot, or ask your AVD administrator whether app installation is allowed.");break;}}catch(Exception e){Error(e);}}
  static string? FindRepoRoot(){DirectoryInfo? dir=new(AppContext.BaseDirectory);while(dir is not null){if(Directory.Exists(Path.Combine(dir.FullName,".git"))&&File.Exists(Path.Combine(dir.FullName,"scripts","Update-SprintPilot.ps1")))return dir.FullName;dir=dir.Parent;}return null;}

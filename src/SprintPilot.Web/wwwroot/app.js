@@ -1,5 +1,5 @@
 const sprintPilotThemeKey='sprintpilot-theme';
-try{const savedTheme=localStorage.getItem(sprintPilotThemeKey);if(savedTheme)document.documentElement.dataset.theme=savedTheme;}catch{}
+try{const savedTheme=localStorage.getItem(sprintPilotThemeKey);if(['system','dark','light','avd'].includes(savedTheme))document.documentElement.dataset.theme=savedTheme;}catch{}
 window.sprintPilot={
  pwaPrompt:null,
  dotnet:null,
@@ -8,6 +8,13 @@ window.sprintPilot={
   try{const saved=localStorage.getItem(sprintPilotThemeKey);if(!persist&&effective==='system'&&saved)effective=saved;if(persist)localStorage.setItem(sprintPilotThemeKey,effective);}catch{}
   document.documentElement.dataset.theme=effective;
   return effective;
+ },
+ restoreTheme(value,persisted){
+  const valid=theme=>['system','dark','light','avd'].includes(theme);
+  let effective=valid(value)?value:'system';
+  // One-time migration of choices previously saved only in the browser.
+  if(!persisted){try{const saved=localStorage.getItem(sprintPilotThemeKey);if(valid(saved))effective=saved;}catch{}}
+  return this.theme(effective,true);
  },
  clearToken(){const e=document.getElementById('pat');if(e)e.value='';},
  focusSearch(){document.getElementById('search')?.focus();},
