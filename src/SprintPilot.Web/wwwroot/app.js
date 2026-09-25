@@ -38,6 +38,12 @@ window.sprintPilot={
   this.dotnet=dotnet;
   this.handler=e=>{const editable=e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable=true]');let cmd='';if(e.ctrlKey&&!e.shiftKey&&e.key.toLowerCase()==='k')cmd='palette';else if(e.key==='Escape')cmd='escape';else if(!editable){if(e.key==='/')cmd='search';else if(e.altKey&&e.key==='ArrowLeft')cmd='previous';else if(e.altKey&&e.key==='ArrowRight')cmd='next';else if(e.key.toLowerCase()==='r'&&!e.ctrlKey&&!e.altKey&&!e.metaKey)cmd='refresh';else if(e.ctrlKey&&e.key.toLowerCase()==='a'&&document.getElementById('work-grid')?.contains(e.target))cmd='select';}if(cmd){e.preventDefault();dotnet.invokeMethodAsync('Shortcut',cmd);}};
   document.addEventListener('keydown',this.handler);
+  // Native drag data must be initialized synchronously, before the server event.
+  this.dragStartHandler=e=>{
+   const handle=e.target instanceof Element&&e.target.closest('.drag-grip[draggable="true"],.card-drag-handle[draggable="true"]');
+   if(handle&&e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','sprintpilot-reorder');}
+  };
+  document.addEventListener('dragstart',this.dragStartHandler);
   this.dragScrollHandler=e=>this.updateDragAutoScroll(e);
   this.dragScrollStop=()=>this.stopDragAutoScroll();
   document.addEventListener('dragover',this.dragScrollHandler);
@@ -74,6 +80,7 @@ window.sprintPilot={
  restoreFocus(){this.beforeDialog?.focus();},
  dispose(){
   if(this.handler)document.removeEventListener('keydown',this.handler);
+  if(this.dragStartHandler)document.removeEventListener('dragstart',this.dragStartHandler);
   if(this.dragScrollHandler)document.removeEventListener('dragover',this.dragScrollHandler);
   if(this.dragScrollStop){document.removeEventListener('drop',this.dragScrollStop);document.removeEventListener('dragend',this.dragScrollStop);}
   this.stopDragAutoScroll?.();

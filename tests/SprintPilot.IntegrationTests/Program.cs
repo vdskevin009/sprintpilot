@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -5,6 +6,32 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SprintPilot.Application;
 using SprintPilot.AzureDevOps;
 using SprintPilot.Domain;
+// Regression: HTML draggable is an enumerated attribute, not a Boolean attribute.
+await using(var services=new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddLogging().BuildServiceProvider())
+await using(var renderer=new Microsoft.AspNetCore.Components.Web.HtmlRenderer(services,services.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>())){
+ var example=SprintPilot.Infrastructure.PlanningExample.Create(new DateOnly(2026,9,15));
+ foreach(var enabled in new[]{true,false}){
+  var html=await renderer.Dispatcher.InvokeAsync(async()=>{
+   var rendered=await renderer.RenderComponentAsync<SprintPilot.Web.Components.WorkGrid>(Microsoft.AspNetCore.Components.ParameterView.FromDictionary(new Dictionary<string,object?>{
+    ["Items"]=example.Items.Take(1).ToList(),["Meta"]=example.Metadata,["Columns"]=new[]{"Title"},
+    ["CanReorder"]=(Func<WorkItem,bool>)(_=>enabled)
+   }));
+   return rendered.ToHtmlString();
+  });
+  if(!html.Contains(enabled?"draggable=\"true\"":"draggable=\"false\""))throw new Exception("Drag handle must render an explicit HTML true/false value.");
+ }
+}
+var home=new SprintPilot.Web.Components.Pages.Home();
+var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+typeof(SprintPilot.Web.Components.Pages.Home).GetField("items",flags)!.SetValue(home,new List<WorkItem>{
+ new(){Id=1,OwnerId="external-owner",Owner="External colleague",Tags=["Blocked"]},new(){Id=2}
+});
+var personName=typeof(SprintPilot.Web.Components.Pages.Home).GetMethod("PersonName",flags)!;
+if((string)personName.Invoke(home,new object[]{"external-owner"})!="External colleague"||
+ (string)personName.Invoke(home,new object[]{""})!="Unassigned"||
+ ((string)personName.Invoke(home,new object[]{"missing-owner"})!).Equals("Unassigned"))
+ throw new Exception("Only genuinely unassigned work may use the Unassigned label.");
+Console.WriteLine("PASS rendered drag attributes and external-owner labels");
 var fake=new FakeAzure();using var http=new HttpClient(fake);var tracker=new AzureTracker(http,new FakeCredentials(),new PatAuthentication(),NullLogger<AzureTracker>.Instance);
 int count=0;void Check(bool x,string name){if(!x)throw new Exception("FAIL: "+name);count++;Console.WriteLine("PASS: "+name);}
 var meta=await tracker.MetadataAsync();Check(meta.Types[0].EstimateField=="Microsoft.VSTS.Scheduling.Effort","Process-specific estimate mapping");
