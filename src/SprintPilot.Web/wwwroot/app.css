@@ -1148,3 +1148,11 @@ html[data-theme=avd] .pipeline-factory-selectors label,html[data-theme=avd] .pip
 .quick-add-error{margin:8px 0 0;color:var(--danger);font-size:10px}
 html[data-theme=avd] .quick-add-pbi-card{border-color:#d9e0e7!important;box-shadow:none!important}
 @media(max-width:820px){.quick-add-pbi-form{grid-template-columns:1fr}.quick-add-submit{width:100%}}
+
+/* Compact workspace controls; selected criteria stay visible when collapsed. */
+.sprint-workspace .workspace-secondary-actions[hidden]{display:none}
+.sprint-workspace .active-filter-summary{display:flex;flex-wrap:wrap;gap:6px}
+.sprint-workspace .active-filter-summary:empty{display:none}
+.sprint-workspace .active-filter-summary:not(:empty){padding:8px 0}
+.sprint-workspace .filter-primary{align-items:center;gap:8px}
+.sprint-workspace .filter-primary .search{min-width:180px}
