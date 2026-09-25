@@ -13,11 +13,13 @@ await using(var renderer=new Microsoft.AspNetCore.Components.Web.HtmlRenderer(se
  foreach(var enabled in new[]{true,false}){
   var html=await renderer.Dispatcher.InvokeAsync(async()=>{
    var rendered=await renderer.RenderComponentAsync<SprintPilot.Web.Components.WorkGrid>(Microsoft.AspNetCore.Components.ParameterView.FromDictionary(new Dictionary<string,object?>{
-    ["Items"]=example.Items.Take(1).ToList(),["Meta"]=example.Metadata,["Columns"]=new[]{"Title"},
+    ["Items"]=example.Items.Take(1).ToList(),["Meta"]=example.Metadata,["Columns"]=new[]{"Title","Tags"},["SuggestedTags"]=(Func<WorkItem,string[]>)(_=>new[]{"First suggestion","Second suggestion","Third suggestion"}),
     ["CanReorder"]=(Func<WorkItem,bool>)(_=>enabled)
    }));
    return rendered.ToHtmlString();
   });
+  html=WebUtility.HtmlDecode(html);
+  if(!html.Contains("+ First suggestion")||html.Contains("+ Second suggestion")||html.Contains("+ Third suggestion")||!html.Contains("More (2)"))throw new Exception("Render one suggested tag and a More control by default.");
   if(!html.Contains(enabled?"draggable=\"true\"":"draggable=\"false\""))throw new Exception("Drag handle must render an explicit HTML true/false value.");
  }
 }

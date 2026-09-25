@@ -1187,3 +1187,27 @@ html[data-theme=avd] .quick-add-pbi-card{border-color:#d9e0e7!important;box-shad
 .pipeline-approvals .pipeline-project-picker{display:flex;flex-direction:row;align-items:center;gap:10px;margin:12px 0;font-size:13px}
 .pipeline-approvals .pipeline-project-picker select{width:320px;max-width:100%}
 @media(max-width:600px){.pipeline-approvals .pipeline-project-picker{align-items:flex-start;flex-direction:column}}
+
+/* Align sprint navigation, quick entry and actions as one full-width toolbar. */
+.sprint-workspace .workspace-top-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;margin-bottom:10px}
+.sprint-workspace .workspace-top-controls .workspace-context-row{margin:0;min-width:0}
+.sprint-workspace .workspace-top-controls .sprint-bar{max-width:none;width:100%;min-width:0}
+.sprint-workspace .workspace-top-controls .workspace-quick-add{margin:0;min-width:0}
+.sprint-workspace .workspace-top-controls .workspace-quick-add input{max-width:none;width:100%;min-width:120px}
+.sprint-workspace .workspace-top-controls>.toolbar{justify-content:flex-end}
+.sprint-workspace .filter-primary .search{flex:1 1 280px;max-width:none}
+.sprint-workspace .grid-wrap .col-title{min-width:360px}
+.sprint-workspace .grid-wrap .col-title .title-button{width:clamp(360px,30vw,740px);min-width:360px;max-width:none;overflow-wrap:anywhere}
+.sprint-workspace .tag-more-suggestions{font-size:11px;padding:4px 7px;color:var(--accent)}
+@media(min-width:1200px){
+ .sprint-workspace .workspace-top-controls{grid-template-columns:minmax(420px,1.15fr) minmax(260px,1fr) auto}
+}
+@media(max-width:1199px){
+ .sprint-workspace .workspace-top-controls>.workspace-context-row{grid-column:1 / -1}
+}
+@media(max-width:700px){
+ .sprint-workspace .workspace-top-controls{grid-template-columns:minmax(0,1fr)}
+ .sprint-workspace .workspace-top-controls>.toolbar{justify-content:flex-start}
+ .sprint-workspace .grid-wrap .col-title{min-width:280px}
+ .sprint-workspace .grid-wrap .col-title .title-button{width:280px;min-width:280px}
+}
