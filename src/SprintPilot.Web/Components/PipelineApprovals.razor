@@ -1,0 +1,49 @@
+@inject TrackerSession Tracker
+@implements IDisposable
+
+<section class="home-card pipeline-approvals" aria-label="Pipeline approvals">
+<header><div><h2>Pipeline approvals <span class="home-card-count">@rows.Count</span></h2><small>@Project · stages awaiting approval</small></div><button disabled="@(loading||approving)" @onclick="Load">↻ Refresh</button></header>
+@if(loading){<p class="pipeline-approval-message" role="status">Loading pending approvals…</p>}
+@if(error!=""){<p class="pipeline-approval-message error-text" role="alert">@error</p>}
+@if(warning!=""){<p class="pipeline-approval-message">@warning</p>}
+@if(message!=""){<p class="pipeline-approval-message" role="status">@message</p>}
+@if(!loading&&error==""&&rows.Count==0){<div class="home-empty">No stages awaiting approval.</div>}
+@foreach(var row in rows){
+<article class="pipeline-approval-row" @key="row.Id">
+<div class="pipeline-approval-context"><strong>@row.Pipeline @if(row.Run!=""){<small>Run @row.Run</small>}</strong><span class="pipeline-approval-stage">@row.Stage</span>@if(row.Instructions!=""){<small>@row.Instructions</small>}</div>
+@if(Uri.TryCreate(row.Url,UriKind.Absolute,out var uri)&&uri.Scheme=="https"){<a href="@row.Url" target="_blank" rel="noopener noreferrer">Open run ↗</a>}
+<button class="primary" disabled="@(!row.CanApprove||loading||approving||error!="")" title="@(row.CanApprove?"Approve this stage":"Approval is unavailable for your account or stage details are incomplete")" @onclick="()=>Approve(row)">@(approvingId==row.Id?"Approving…":"Approve")</button>
+</article>
+}
+</section>
+
+@code {
+ [Parameter] public string Project{get;set;}="";
+ string loadedProject="",error="",warning="",message="",approvingId="";
+ bool loading,approving,disposed;
+ List<PipelineApproval> rows=[];
+ readonly CancellationTokenSource lifetime=new();
+ protected override async Task OnParametersSetAsync(){if(Project!=loadedProject){loadedProject=Project;message="";await Load();}}
+ public Task RefreshApprovals()=>Load();
+ async Task Load(){
+  if(loading||disposed)return;
+  loading=true;error="";warning="";rows=[];
+  var project=Project;
+  try{var result=await Tracker.PendingPipelineApprovalsAsync(project,lifetime.Token);if(project==Project){rows=result.Items.ToList();warning=result.Warning;}}
+  catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch(Exception e){error=e is TrackerException?e.Message:"Pending approvals could not be loaded. Check Build read and Pipeline Resources permissions, then refresh.";}
+  finally{loading=false;}
+ }
+ async Task Approve(PipelineApproval row){
+  if(loading||approving||!row.CanApprove)return;
+  approving=true;approvingId=row.Id;message="";error="";
+  try{
+   await Tracker.ApprovePipelineAsync(Project,row.Id,lifetime.Token);
+   message=$"Approval recorded for {row.Pipeline} · {row.Stage}. Other checks or approvers may still be pending.";
+   await Load();
+  }catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch(Exception e){error=e is TrackerException?e.Message:"The approval outcome could not be confirmed. Refresh before retrying.";}
+  finally{approving=false;approvingId="";}
+ }
+ public void Dispose(){disposed=true;lifetime.Cancel();lifetime.Dispose();}
+}

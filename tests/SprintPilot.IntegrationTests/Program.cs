@@ -32,6 +32,7 @@ if((string)personName.Invoke(home,new object[]{"external-owner"})!="External col
  ((string)personName.Invoke(home,new object[]{"missing-owner"})!).Equals("Unassigned"))
  throw new Exception("Only genuinely unassigned work may use the Unassigned label.");
 Console.WriteLine("PASS rendered drag attributes and external-owner labels");
+await ApprovalChecks.Run();
 var fake=new FakeAzure();using var http=new HttpClient(fake);var tracker=new AzureTracker(http,new FakeCredentials(),new PatAuthentication(),NullLogger<AzureTracker>.Instance);
 int count=0;void Check(bool x,string name){if(!x)throw new Exception("FAIL: "+name);count++;Console.WriteLine("PASS: "+name);}
 var meta=await tracker.MetadataAsync();Check(meta.Types[0].EstimateField=="Microsoft.VSTS.Scheduling.Effort","Process-specific estimate mapping");

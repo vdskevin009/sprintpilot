@@ -11,14 +11,14 @@ public interface ITrackerAuthentication {ValueTask AuthenticateAsync(HttpRequest
 public sealed class PatAuthentication:ITrackerAuthentication {
  public ValueTask AuthenticateAsync(HttpRequestMessage request,Credentials c,CancellationToken ct){request.Headers.Authorization=new AuthenticationHeaderValue("Basic",Convert.ToBase64String(Encoding.UTF8.GetBytes(":"+c.Token)));return ValueTask.CompletedTask;}
 }
-public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITrackerAuthentication auth,ILogger<AzureTracker> logger):IWorkTracker {
+public sealed partial class AzureTracker(HttpClient http,ICredentialStore store,ITrackerAuthentication auth,ILogger<AzureTracker> logger):IWorkTracker {
  private ConnectionInfo? activeConnection;private Metadata? cached;private DateTimeOffset expires;private string cacheKey="";private readonly SemaphoreSlim metadataGate=new(1,1);
  public static void ValidateConnection(ConnectionInfo c){if(!System.Text.RegularExpressions.Regex.IsMatch(c.Organization,@"^[A-Za-z0-9][A-Za-z0-9-]{0,100}$")||string.IsNullOrWhiteSpace(c.Project)||c.Project.Length>200)throw new TrackerException("Enter the organization name (not a URL) and a project name.");}
  static string E(string s)=>Uri.EscapeDataString(s);
  static string S(JsonNode? n)=>n?.ToString()??"";
  static JsonArray Values(JsonNode n)=>(JsonArray?)n["value"]??[];
  async Task<Credentials> Credentials(CancellationToken ct)=>await store.GetAsync(ct)??throw new TrackerException("Azure DevOps connection is required.");
- async Task<JsonNode> Send(Credentials c,string path,HttpMethod method,object? body=null,bool patch=false,CancellationToken ct=default,bool organization=false,bool apiVersion=true,string? projectOverride=null){
+ async Task<JsonNode> Send(Credentials c,string path,HttpMethod method,object? body=null,bool patch=false,CancellationToken ct=default,bool organization=false,bool apiVersion=true,string? projectOverride=null,Action<string>? continuation=null){
   ValidateConnection(c.Connection);activeConnection=c.Connection;var selectedProject=projectOverride??c.Connection.Project;var baseUrl=$"https://dev.azure.com/{E(c.Connection.Organization)}/"+(organization?"":E(selectedProject)+"/");
   for(int attempt=0;;attempt++){
    using var req=new HttpRequestMessage(method,baseUrl+path+(apiVersion?(path.Contains('?')?"&":"?")+"api-version=7.1":""));await auth.AuthenticateAsync(req,c,ct);
@@ -29,6 +29,7 @@ public sealed class AzureTracker(HttpClient http,ICredentialStore store,ITracker
     // Retry reads only. Never replay a mutation after an ambiguous network outcome.
     if(method!=HttpMethod.Patch && !path.Contains("workitems/$") && !path.Contains("/comments",StringComparison.OrdinalIgnoreCase) && (response.StatusCode==(HttpStatusCode)429 || response.StatusCode==HttpStatusCode.ServiceUnavailable) && attempt<2){var wait=response.Headers.RetryAfter?.Delta??TimeSpan.FromSeconds(attempt+1);await Task.Delay(wait>TimeSpan.FromSeconds(10)?TimeSpan.FromSeconds(10):wait,ct);continue;}
     if(!response.IsSuccessStatusCode){logger.LogWarning("Azure DevOps operation failed with status {Status}",(int)response.StatusCode);throw new TrackerException(response.StatusCode switch {HttpStatusCode.Unauthorized=>"Authentication failed. Check or renew your PAT.",HttpStatusCode.Forbidden=>"Permission denied. Check project access and token scopes.",HttpStatusCode.NotFound=>"Item or project not found, or access is denied.",HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed=>"Revision conflict. Refresh and review the newer item before retrying.",HttpStatusCode.BadRequest when method==HttpMethod.Get=>"Azure DevOps rejected the connection request. Verify the organization and project names, then try again.",HttpStatusCode.BadRequest=>"Azure DevOps rejected the fields, query, transition, or revision. Refresh and verify the proposed change.",(HttpStatusCode)429=>"Azure DevOps is throttling requests. Wait before retrying.",_=>"Azure DevOps request failed. Refresh to confirm server state before retrying."});}
+    continuation?.Invoke(response.Headers.TryGetValues("x-ms-continuationtoken",out var tokens)?tokens.FirstOrDefault()??"":"");
     try{return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))??throw new TrackerException("Empty Azure DevOps response.");}catch(System.Text.Json.JsonException){throw new TrackerException("Unexpected Azure DevOps response.");}
    }
   }

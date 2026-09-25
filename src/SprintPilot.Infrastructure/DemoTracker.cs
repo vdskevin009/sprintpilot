@@ -47,6 +47,15 @@ public sealed class DemoTracker:IWorkTracker {
  public Task<WorkItem> CreateAsync(string type,IReadOnlyList<Change> changes,int? parent,CancellationToken ct=default){lock(sync){var item=ItemChanges.Apply(new(){Id=items.Keys.Max()+1,Revision=1,Type=type,State="New",Parent=parent,Changed=DateTimeOffset.UtcNow},changes,metadata);items[item.Id]=item;return Task.FromResult(item);}}
 
  public Task<IReadOnlyList<string>> PipelineYamlFilesAsync(string project,string repositoryId,string branch,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<string>>(new[]{"/azure-pipelines.yml","/pipelines/deploy.yml","/pipelines/infrastructure.yml"});
+ readonly HashSet<string> approvedDemoPipelines=[];
+ public Task<PipelineApprovalList> PendingPipelineApprovalsAsync(string project,CancellationToken ct=default){
+  PipelineApproval[] rows=[new("demo-preprod","Pablo API","20260925.1","Pre-prod","",true,"Review the deployment before approving."),new("demo-prod","FrontCare","20260925.2","Production","",false,"Awaiting another approver.")];
+  lock(sync)return Task.FromResult(new PipelineApprovalList(rows.Where(x=>!approvedDemoPipelines.Contains(x.Id)).ToArray()));
+ }
+ public Task ApprovePipelineAsync(string project,string approvalId,CancellationToken ct=default){
+  if(approvalId!="demo-preprod")throw new TrackerException("You cannot approve this stage.");
+  lock(sync)approvedDemoPipelines.Add(approvalId);return Task.CompletedTask;
+ }
  public Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<PipelineDefinition>>(Array.Empty<PipelineDefinition>());
  public Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<PipelineCreateResult>>(pipelines.Select((p,i)=>new PipelineCreateResult(p.Name,true,1000+i,null)).ToArray());
 }
