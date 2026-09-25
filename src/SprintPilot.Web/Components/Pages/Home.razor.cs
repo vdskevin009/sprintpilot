@@ -13,10 +13,11 @@ public partial class Home {
  PlanningPage? planner;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
  string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
- bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
+ bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,quickPbiCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
  bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported,branchCleanupLoading,branchDeleting,pullRequestCleanupLoading,pullRequestAbandoning;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";string? workspacePriorityOwner;
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
+ string quickPbiTitle="",quickPbiIteration="",quickPbiError="";int? quickPbiCreatedId;
  string smartFixPrompt="",smartFixCopilotText="",magicPrompt="",magicCopilotText="",appUpdateText="";
  string branchProject="",branchProjectSearch="",branchRepositoryId="",branchRepositorySearch="",branchSearch="",branchStatusFilter="all";
  string pullRequestProject="",pullRequestProjectSearch="",pullRequestRepositoryId="",pullRequestRepositorySearch="",pullRequestSearch="",pullRequestStatusFilter="all";
@@ -45,6 +46,7 @@ public partial class Home {
  string PlanningProfileKey => Tracker.Demo ? "demo" : $"{connection?.Organization}|{connection?.Project}|{connection?.Team}";
  static string TeamPreferenceKey(ConnectionInfo c)=>$"{c.Organization}|{c.Project}";
  Iteration? CurrentSprint=>meta?.Iterations.ElementAtOrDefault(sprintIndex);
+ string QuickPbiIterationPath=>quickPbiIteration==""?CurrentSprint?.Path??"":quickPbiIteration;
  Iteration? NextSprint=>meta?.Iterations.ElementAtOrDefault(sprintIndex+1);
  string Adjacent(int delta)=>meta?.Iterations.ElementAtOrDefault(sprintIndex+delta)?.Name??"No sprint";
  string DateRange=>CurrentSprint?.Start is {} start?$"{start:MMM d} – {CurrentSprint.Finish:MMM d, yyyy}":"Dates not configured";
@@ -314,6 +316,28 @@ public partial class Home {
  void OpenPerson(string id){ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="Overview";sort="Order";descending=false;detail=null;dailyPanelItem=null;}
  async Task OpenSprintPerson(Iteration iteration,string id){if(meta is null)return;var index=Array.IndexOf(meta.Iterations,iteration);if(index<0)return;sprintIndex=index;ClearFilters();ownerFilters.Add(id);screen="workspace";workspaceMode="Overview";sort="Order";descending=false;detail=null;dailyPanelItem=null;await LoadSprint();}
  void OpenGroup(string tag){ClearFilters();if(ApplicationTags().Contains(tag,StringComparer.OrdinalIgnoreCase))applicationFilter=tag;else tagFilter=tag;screen="workspace";workspaceMode="Overview";detail=null;dailyPanelItem=null;}
+ void QuickPbiSprintChanged(ChangeEventArgs e){quickPbiIteration=e.Value?.ToString()??"";quickPbiError="";quickPbiCreatedId=null;}
+ async Task CreateQuickPbi(){
+  if(quickPbiCreating||meta is null)return;
+  quickPbiError="";quickPbiCreatedId=null;
+  var title=quickPbiTitle.Trim();
+  if(title==""){quickPbiError="Enter a PBI title.";return;}
+  if(title.Length>255){quickPbiError="PBI titles can be at most 255 characters.";return;}
+  var iteration=meta.Iterations.FirstOrDefault(i=>i.Path.Equals(QuickPbiIterationPath,StringComparison.OrdinalIgnoreCase));
+  if(iteration is null){quickPbiError="Choose a valid sprint.";return;}
+  var type=meta.Types.FirstOrDefault(t=>t.Name.Equals("Product Backlog Item",StringComparison.OrdinalIgnoreCase));
+  if(type is null){quickPbiError="This Azure DevOps project does not expose the Product Backlog Item work-item type.";return;}
+  var area=meta.Scope.FirstOrDefault()?.Path??meta.Areas.FirstOrDefault()??"";
+  quickPbiCreating=true;
+  try{
+   var created=await Tracker.CreateAsync(type.Name,[new(ItemField.Title,title),new(ItemField.Area,area),new(ItemField.Iteration,iteration.Path)],null,lifetime.Token);
+   quickPbiCreatedId=created.Id;quickPbiTitle="";quickPbiIteration=iteration.Path;sprintCache.Clear();
+   if(created.Iteration.Equals(CurrentSprint?.Path,StringComparison.OrdinalIgnoreCase)){items.Add(created);items=items.OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();}
+   if(Planning.IsPlanningType(created.Type,PlanningPrefs))planningItems.Add(created);
+   Notify($"#{created.Id} created in {iteration.Name}.");
+  }catch(Exception e){quickPbiError=e is TrackerException?e.Message:"The PBI could not be created. Check the Azure DevOps connection and try again.";}
+  finally{quickPbiCreating=false;}
+ }
  string DefaultMeetingType()=>meta?.Types.FirstOrDefault(t=>t.Name is "Product Backlog Item" or "User Story")?.Name??meta?.Types.FirstOrDefault()?.Name??"";
  void EnsureMeetingDefaults(){if(meetingWorkType=="")meetingWorkType=DefaultMeetingType();if(meetingTitle=="")meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";}
  void ResetMeeting(){meetingTitle=$"Business meeting · {DateTime.Now:MMM d}";meetingNotes=meetingCopilotText=meetingError="";meetingImport=new();meetingActions=[];meetingWorkType=DefaultMeetingType();}
