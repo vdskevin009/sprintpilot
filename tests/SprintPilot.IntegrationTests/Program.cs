@@ -18,6 +18,7 @@ await using(var renderer=new Microsoft.AspNetCore.Components.Web.HtmlRenderer(se
    }));
    return rendered.ToHtmlString();
   });
+  html=WebUtility.HtmlDecode(html);
   if(!html.Contains("+ First suggestion")||html.Contains("+ Second suggestion")||html.Contains("+ Third suggestion")||!html.Contains("More (2)"))throw new Exception("Render one suggested tag and a More control by default.");
   if(!html.Contains(enabled?"draggable=\"true\"":"draggable=\"false\""))throw new Exception("Drag handle must render an explicit HTML true/false value.");
  }
