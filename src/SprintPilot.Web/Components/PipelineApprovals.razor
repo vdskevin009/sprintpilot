@@ -2,27 +2,55 @@
 @inject SprintPilot.Infrastructure.PipelineApprovalSelectionStore SelectionStore
 @implements IDisposable
 
-<section class="home-card pipeline-approvals" aria-label="Pipeline approvals">
-<header><div><h2>Pipeline approvals <span class="home-card-count">@rows.Count</span></h2><small>Stages awaiting approval</small></div><button disabled="@(loading||approving)" @onclick="RefreshApprovals">↻ Refresh</button></header>
+<section class="home-card pipeline-approvals pipeline-control-center" aria-label="Pipeline activity">
+<header><div><span class="eyebrow">Delivery</span><h2>Pipeline activity</h2><small>Approvals, running stages and failures from the last 5 days</small></div><button disabled="@(loading||approving)" @onclick="RefreshApprovals">↻ Refresh</button></header>
 <label class="pipeline-project-picker">Project
-<select aria-label="Pipeline approvals project" value="@selectedProjectId" disabled="@(loading||approving||projects.Count==0)" @onchange="ChangeProject">
+<select aria-label="Pipeline activity project" value="@selectedProjectId" disabled="@(loading||approving||projects.Count==0)" @onchange="ChangeProject">
 @if(projects.Count==0){<option value="">No projects available</option>}
 @foreach(var project in projects){<option value="@project.Id">@project.Name</option>}
 </select></label>
 @if(selectionNotice!=""){<p class="pipeline-approval-message" role="status">@selectionNotice</p>}
-@if(loading){<p class="pipeline-approval-message" role="status">Loading pending approvals…</p>}
+@if(loading){<p class="pipeline-approval-message" role="status">Loading pipeline activity…</p>}
 @if(error!=""){<p class="pipeline-approval-message error-text" role="alert">@error</p>}
 @if(warning!=""){<p class="pipeline-approval-message">@warning</p>}
 @if(message!=""){<p class="pipeline-approval-message" role="status">@message</p>}
-@if(!loading&&error==""&&projects.Count>0&&rows.Count==0){<div class="home-empty">No stages awaiting approval.</div>}
-@foreach(var row in rows){
-<article class="pipeline-approval-row" @key="row.Id">
-<div class="pipeline-approval-context"><strong>@row.Pipeline @if(row.Run!=""){<small>Run @row.Run</small>}</strong><span class="pipeline-approval-stage">@row.Stage</span>@if(row.Instructions!=""){<small>@row.Instructions</small>}</div>
-@if(Uri.TryCreate(row.Url,UriKind.Absolute,out var uri)&&uri.Scheme=="https"){<a href="@row.Url" target="_blank" rel="noopener noreferrer">Open run ↗</a>}
-<button class="primary" disabled="@(!row.CanApprove||loading||approving||error!="")" title="@(row.CanApprove?"Approve this stage":"Approval is unavailable for your account or stage details are incomplete")" @onclick="()=>Approve(row)">@(approvingId==row.Id?"Approving…":"Approve")</button>
-</article>
-}
+<div class="pipeline-health-counts" aria-label="Pipeline health summary">
+ <span><strong>@rows.Count</strong> approvals</span>
+ <span><strong>@activity.Running.Count</strong> running</span>
+ <span class="@(activity.Failed.Count>0?"failed":"")"><strong>@activity.Failed.Count</strong> failed</span>
+</div>
+<div class="pipeline-health-grid">
+ <section><h3>Pending approvals</h3>
+ @if(!loading&&rows.Count==0){<div class="home-empty compact">No stages awaiting approval.</div>}
+ @foreach(var row in rows.Take(5)){
+  <article class="pipeline-approval-row" @key="row.Id">
+   <div class="pipeline-approval-context"><strong>@row.Pipeline @if(row.Run!=""){<small>Run @row.Run</small>}</strong><span class="pipeline-approval-stage">@row.Stage</span></div>
+   <button class="primary" disabled="@(!row.CanApprove||loading||approving||error!="")" @onclick="()=>Approve(row)">@(approvingId==row.Id?"Approving…":"Approve")</button>
+  </article>
+ }
+ </section>
+ <section><h3>Running</h3>
+ @if(!loading&&activity.Running.Count==0){<div class="home-empty compact">No pipelines running.</div>}
+ @foreach(var run in activity.Running.Take(5)){
+  <button class="pipeline-run-row" @onclick="()=>selectedRun=run"><span><strong>@run.Pipeline</strong><small>@run.Run · @run.Branch</small></span><span><em>Running</em><small>@(run.CurrentStage==""?"Stage unavailable":run.CurrentStage)</small></span></button>
+ }
+ </section>
+ <section><h3>Recent failures</h3>
+ @if(!loading&&activity.Failed.Count==0){<div class="home-empty compact">No failures in the last 5 days.</div>}
+ @foreach(var run in activity.Failed.Take(5)){
+  <button class="pipeline-run-row failed" @onclick="()=>selectedRun=run"><span><strong>@run.Pipeline</strong><small>@run.Run · @run.Branch</small></span><span><em>Failed</em><small>@(run.FailedStage==""?"Failed stage unavailable":run.FailedStage)</small></span></button>
+ }
+ </section>
+</div>
 </section>
+
+@if(selectedRun is {} selected){
+<div class="scrim" @onclick="()=>selectedRun=null"><section class="dialog wide pipeline-run-dialog" role="dialog" aria-modal="true" aria-label="Pipeline run details" @onclick:stopPropagation>
+<header><div><h2>@selected.Pipeline</h2><small>@selected.Run · @selected.Project</small></div><button aria-label="Close" @onclick="()=>selectedRun=null">×</button></header>
+<div class="pipeline-run-detail-grid"><span><small>Status</small><strong>@(selected.Result==""?selected.Status:selected.Result)</strong></span><span><small>Branch</small><strong>@(selected.Branch==""?"—":selected.Branch)</strong></span><span><small>Current stage</small><strong>@(selected.CurrentStage==""?"—":selected.CurrentStage)</strong></span><span><small>Failed stage</small><strong>@(selected.FailedStage==""?"—":selected.FailedStage)</strong></span><span><small>Started</small><strong>@(selected.StartTime?.ToLocalTime().ToString("MMM d, HH:mm")??"—")</strong></span><span><small>Finished</small><strong>@(selected.FinishTime?.ToLocalTime().ToString("MMM d, HH:mm")??"—")</strong></span></div>
+@if(Uri.TryCreate(selected.Url,UriKind.Absolute,out var u)&&u.Scheme=="https"){<a class="primary link-button" href="@selected.Url" target="_blank" rel="noopener noreferrer">Open in Azure DevOps ↗</a>}
+</section></div>
+}
 
 @code {
  [Parameter] public string Project{get;set;}="";
@@ -31,11 +59,13 @@
  bool loading,approving,disposed;
  List<AzureProject> projects=[];
  List<PipelineApproval> rows=[];
+ PipelineActivitySnapshot activity=new([],[]);
+ PipelineRunSummary? selectedRun;
  readonly CancellationTokenSource lifetime=new();
  protected override Task OnInitializedAsync()=>RefreshApprovals();
  public async Task RefreshApprovals(){
   if(loading||approving||disposed)return;
-  loading=true;error="";rows=[];warning="";
+  loading=true;error="";rows=[];warning="";activity=new([],[]);
   try{
    projects=(await Tracker.ProjectsAsync(lifetime.Token)).OrderBy(p=>p.Name,StringComparer.OrdinalIgnoreCase).ToList();
    var remembered=selectedProjectId!=""?selectedProjectId:Tracker.Demo?null:await SelectionStore.LoadAsync(Organization,lifetime.Token);
@@ -54,7 +84,7 @@
   if(loading||approving||disposed)return;
   var id=e.Value?.ToString()??"";
   if(!projects.Any(p=>p.Id==id))return;
-  selectedProjectId=id;message="";selectionNotice="";rows=[];
+  selectedProjectId=id;message="";selectionNotice="";rows=[];activity=new([],[]);
   loading=true;
   try{if(!Tracker.Demo)await SelectionStore.SaveAsync(Organization,id,lifetime.Token);}
   catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
@@ -64,11 +94,16 @@
  }
  async Task Load(){
   if(loading||disposed||selectedProjectId=="")return;
-  loading=true;error="";warning="";rows=[];
+  loading=true;error="";warning="";rows=[];activity=new([],[]);
   var project=selectedProjectId;
-  try{var result=await Tracker.PendingPipelineApprovalsAsync(project,lifetime.Token);if(project==selectedProjectId){rows=result.Items.ToList();warning=result.Warning;}}
+  try{
+   var approvalsTask=Tracker.PendingPipelineApprovalsAsync(project,lifetime.Token);
+   var activityTask=Tracker.PipelineActivityAsync(project,5,lifetime.Token);
+   await Task.WhenAll(approvalsTask,activityTask);
+   if(project==selectedProjectId){var result=await approvalsTask;rows=result.Items.ToList();warning=result.Warning;activity=await activityTask;}
+  }
   catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
-  catch(Exception e){error=e is TrackerException?e.Message:"Pending approvals could not be loaded. Check Build read and Pipeline Resources permissions, then refresh.";}
+  catch(Exception e){error=e is TrackerException?e.Message:"Pipeline activity could not be loaded. Check Build read and Pipeline Resources permissions, then refresh.";}
   finally{loading=false;}
  }
  async Task Approve(PipelineApproval row){

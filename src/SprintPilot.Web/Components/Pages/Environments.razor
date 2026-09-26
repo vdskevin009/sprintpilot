@@ -1,0 +1,135 @@
+@page "/environments"
+@rendermode InteractiveServer
+@inject TrackerSession Tracker
+@inject IPreferencesStore Preferences
+@implements IDisposable
+
+<section class="environment-page">
+ <div class="page-heading environment-heading">
+  <div><div class="heading-context">Deployment landscape</div><h1>Environments</h1><p>Compare three environments side by side, then identify who can clean up the rest.</p></div>
+  <div class="toolbar"><button disabled="@loading" @onclick="Refresh">↻ Refresh</button><a class="link-button" href="/">Back to dashboard</a></div>
+ </div>
+ <div class="environment-project-bar">
+  <label>Project<select value="@projectId" disabled="@(loading||projects.Count==0)" @onchange="ChangeProject">@foreach(var p in projects){<option value="@p.Id">@p.Name</option>}</select></label>
+  <span>Deployment history · last 14 days</span>
+ </div>
+ @if(error!=""){<div class="notice error" role="alert">@error</div>}
+ @if(loading){<div class="environment-loading">Loading environments and recent deployments…</div>}
+ @if(!loading&&environments.Count==0&&projectId!=""){<div class="home-empty">No Azure DevOps environments were found in this project.</div>}
+ @if(environments.Count>0){
+ <div class="environment-columns">
+ @for(var slot=0;slot<3;slot++){var index=slot;var selected=SelectedEnvironment(index);
+  <section class="environment-column">
+   <header><div><span class="eyebrow">Environment @(index+1)</span><h2>@(selected?.Name??"Choose environment")</h2></div>@if(selected is not null){<span class="environment-status-dot"></span>}</header>
+   <label class="environment-slot-picker">Environment
+    <select value="@SlotValue(index)" @onchange="e=>ChangeSlot(index,e)">
+     <option value="">Not selected</option>
+     @foreach(var env in environments){<option value="@env.Id">@env.Name</option>}
+    </select>
+   </label>
+   @if(selected is null){<div class="home-empty compact">Select an environment for this column.</div>}
+   else {
+    var rows=DeploymentsFor(selected.Id);
+    if(rows.Count==0){<div class="home-empty compact">No deployments in the last 14 days.</div>}
+    else {<div class="environment-deployment-list">@foreach(var deployment in rows){
+     <button class="environment-deployment @(DeploymentFailed(deployment)?"failed":"succeeded")" @onclick="()=>selectedDeployment=deployment">
+      <span class="deployment-state">@(DeploymentFailed(deployment)?"Failed":"Success")</span>
+      <strong>@(deployment.Definition==""?"Deployment":deployment.Definition)</strong>
+      <small>@(deployment.Run==""?$"#{deployment.Id}":deployment.Run)@if(deployment.Branch!=""){<text> · @deployment.Branch</text>}</small>
+      <time>@DeploymentTime(deployment)</time>
+     </button>
+    }</div>}
+   }
+  </section>
+ }
+ </div>
+
+ <section class="environment-cleanup home-card">
+  <header><div><span class="eyebrow">Cleanup coordination</span><h2>Who can remove what?</h2><small>The team group is Reader; record the administrator who owns deletion rights for each environment.</small></div><input aria-label="Filter environments" placeholder="Filter environment or admin…" @bind="cleanupSearch" @bind:event="oninput"/></header>
+  <div class="environment-cleanup-table">
+   <div class="environment-cleanup-head"><span>Environment</span><span>Recent activity</span><span>Group role</span><span>Administrator</span></div>
+   @foreach(var env in FilteredCleanup()){
+    <div class="environment-cleanup-row">
+     <span><strong>@env.Name</strong><small>@SelectedProjectName</small></span>
+     <span>@EnvironmentActivity(env)</span>
+     <span><em class="role-pill">Reader</em></span>
+     <label><span class="sr-only">Administrator for @env.Name</span><input value="@AdminFor(env.Id)" placeholder="Person with delete rights" @onchange="e=>SaveAdmin(env.Id,e)"/></label>
+    </div>
+   }
+  </div>
+  <p class="muted environment-cleanup-note">Administrator is a SprintPilot coordination field. Deletion stays in Azure DevOps until an explicit delete workflow is added.</p>
+ </section>
+ }
+</section>
+
+@if(selectedDeployment is {} d){
+<div class="scrim" @onclick="()=>selectedDeployment=null"><section class="dialog wide environment-deployment-dialog" role="dialog" aria-modal="true" aria-label="Deployment details" @onclick:stopPropagation>
+ <header><div><h2>@(d.Definition==""?"Deployment":d.Definition)</h2><small>@(EnvironmentName(d.EnvironmentId)) · @(d.Run==""?$"#{d.Id}":d.Run)</small></div><button aria-label="Close" @onclick="()=>selectedDeployment=null">×</button></header>
+ <div class="pipeline-run-detail-grid">
+  <span><small>Result</small><strong>@(d.Result==""?d.Status:d.Result)</strong></span>
+  <span><small>Branch</small><strong>@(d.Branch==""?"—":d.Branch)</strong></span>
+  <span><small>Stage</small><strong>@(d.Stage==""?"—":d.Stage)</strong></span>
+  <span><small>Job</small><strong>@(d.Job==""?"—":d.Job)</strong></span>
+  <span><small>Started</small><strong>@(d.StartTime?.ToLocalTime().ToString("MMM d, HH:mm")??"—")</strong></span>
+  <span><small>Finished</small><strong>@(d.FinishTime?.ToLocalTime().ToString("MMM d, HH:mm")??"—")</strong></span>
+ </div>
+ @if(SafeLink(d.Url)){<a class="primary link-button" href="@d.Url" target="_blank" rel="noopener noreferrer">Open in Azure DevOps ↗</a>}
+</section></div>
+}
+
+@code {
+ readonly CancellationTokenSource lifetime=new();
+ Preferences prefs=new(); List<AzureProject> projects=[]; List<AzureEnvironment> environments=[];
+ readonly Dictionary<int,List<EnvironmentDeployment>> deployments=[];
+ string projectId="",error="",cleanupSearch=""; bool loading,disposed; EnvironmentDeployment? selectedDeployment;
+ string SelectedProjectName=>projects.FirstOrDefault(p=>p.Id==projectId)?.Name??"";
+ protected override async Task OnInitializedAsync(){prefs=await Preferences.LoadAsync(lifetime.Token);await LoadProjects();}
+ async Task LoadProjects(){
+  loading=true;error="";
+  try{projects=(await Tracker.ProjectsAsync(lifetime.Token)).OrderBy(p=>p.Name,StringComparer.OrdinalIgnoreCase).ToList();projectId=projects.FirstOrDefault()?.Id??"";if(projectId!="")await LoadProject();}
+  catch(Exception e){error=e is TrackerException?e.Message:"Projects could not be loaded.";}finally{loading=false;}
+ }
+ async Task ChangeProject(ChangeEventArgs e){projectId=e.Value?.ToString()??"";await LoadProject();}
+ async Task Refresh()=>await LoadProject();
+ async Task LoadProject(){
+  if(projectId==""||disposed)return;loading=true;error="";deployments.Clear();selectedDeployment=null;
+  try{
+   environments=(await Tracker.EnvironmentsAsync(projectId,lifetime.Token)).OrderBy(x=>x.Name,StringComparer.OrdinalIgnoreCase).ToList();
+   EnsureSlots();
+   await LoadSelectedDeployments();
+  }catch(Exception e){error=e is TrackerException?e.Message:"Environments could not be loaded. Check Environment read permissions and refresh.";}
+  finally{loading=false;}
+ }
+ void EnsureSlots(){
+  if(!prefs.EnvironmentSlotsByProject.TryGetValue(projectId,out var slots)||slots.Length!=3){
+   var picked=new string[3];
+   string? Match(params string[] terms)=>environments.FirstOrDefault(e=>terms.Any(t=>e.Name.Contains(t,StringComparison.OrdinalIgnoreCase)))?.Id.ToString(CultureInfo.InvariantCulture);
+   picked[0]=Match("pre-prod","preprod","pre prod","uat")??environments.ElementAtOrDefault(0)?.Id.ToString(CultureInfo.InvariantCulture)??"";
+   picked[1]=Match("prod")??environments.FirstOrDefault(e=>e.Id.ToString()!=picked[0])?.Id.ToString(CultureInfo.InvariantCulture)??"";
+   picked[2]=Match("dr","disaster")??environments.FirstOrDefault(e=>!picked.Contains(e.Id.ToString(CultureInfo.InvariantCulture)))?.Id.ToString(CultureInfo.InvariantCulture)??"";
+   prefs.EnvironmentSlotsByProject[projectId]=picked;_ = Persist();
+  }
+ }
+ string[] Slots(){if(!prefs.EnvironmentSlotsByProject.TryGetValue(projectId,out var slots)||slots.Length!=3){slots=["","",""];prefs.EnvironmentSlotsByProject[projectId]=slots;}return slots;}
+ string SlotValue(int index)=>Slots()[index];
+ AzureEnvironment? SelectedEnvironment(int index)=>int.TryParse(SlotValue(index),out var id)?environments.FirstOrDefault(e=>e.Id==id):null;
+ async Task ChangeSlot(int index,ChangeEventArgs e){var slots=Slots();slots[index]=e.Value?.ToString()??"";prefs.EnvironmentSlotsByProject[projectId]=slots;await Persist();await LoadSelectedDeployments();}
+ async Task LoadSelectedDeployments(){
+  var ids=Slots().Select(x=>int.TryParse(x,out var id)?id:0).Where(x=>x>0).Distinct().ToArray();
+  foreach(var id in ids){
+   try{deployments[id]=(await Tracker.EnvironmentDeploymentsAsync(projectId,id,14,lifetime.Token)).ToList();}
+   catch(TrackerException){deployments[id]=[];}
+  }
+ }
+ IReadOnlyList<EnvironmentDeployment> DeploymentsFor(int id)=>deployments.GetValueOrDefault(id)??[];
+ static bool DeploymentFailed(EnvironmentDeployment d)=>d.Result.Equals("failed",StringComparison.OrdinalIgnoreCase)||d.Status.Equals("failed",StringComparison.OrdinalIgnoreCase);
+ static string DeploymentTime(EnvironmentDeployment d)=>(d.FinishTime??d.StartTime)?.ToLocalTime().ToString("MMM d · HH:mm")??"Time unavailable";
+ string EnvironmentName(int id)=>environments.FirstOrDefault(e=>e.Id==id)?.Name??$"Environment {id}";
+ string AdminFor(int id)=>prefs.EnvironmentAdminById.GetValueOrDefault(id.ToString(CultureInfo.InvariantCulture),"");
+ async Task SaveAdmin(int id,ChangeEventArgs e){var value=e.Value?.ToString()?.Trim()??"";var key=id.ToString(CultureInfo.InvariantCulture);if(value=="")prefs.EnvironmentAdminById.Remove(key);else prefs.EnvironmentAdminById[key]=value;await Persist();}
+ IEnumerable<AzureEnvironment> FilteredCleanup(){var q=cleanupSearch.Trim();return environments.Where(e=>q==""||e.Name.Contains(q,StringComparison.OrdinalIgnoreCase)||AdminFor(e.Id).Contains(q,StringComparison.OrdinalIgnoreCase)).OrderBy(e=>e.Name);}
+ string EnvironmentActivity(AzureEnvironment e){var rows=DeploymentsFor(e.Id);var latest=rows.FirstOrDefault();if(latest is not null)return (DeploymentFailed(latest)?"Failed · ":"Success · ")+DeploymentTime(latest);return e.ModifiedOn is {} d?$"Modified {d.ToLocalTime():MMM d}":"No recent deployment loaded";}
+ async Task Persist(){try{await Preferences.SaveAsync(prefs,lifetime.Token);}catch(Exception e){error=e is TrackerException?e.Message:"Environment preferences could not be saved.";}}
+ static bool SafeLink(string url)=>Uri.TryCreate(url,UriKind.Absolute,out var uri)&&uri.Scheme=="https"&&(uri.Host=="dev.azure.com"||uri.Host.EndsWith(".visualstudio.com",StringComparison.OrdinalIgnoreCase));
+ public void Dispose(){disposed=true;lifetime.Cancel();lifetime.Dispose();}
+}

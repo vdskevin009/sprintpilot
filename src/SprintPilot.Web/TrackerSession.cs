@@ -11,14 +11,18 @@ public sealed class TrackerSession(AzureTracker azure,DemoTracker demo):IWorkTra
  public Task<IReadOnlyList<WorkItem>> SprintAsync(string sprint,CancellationToken ct=default)=>Active.SprintAsync(sprint,ct);
  public Task ReorderSprintAsync(string iterationId,string iterationPath,int id,int previousId,int nextId,CancellationToken ct=default)=>Active.ReorderSprintAsync(iterationId,iterationPath,id,previousId,nextId,ct);
  public Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default)=>Active.CapacityAsync(iterationId,ct);
+ public Task SetDaysOffAsync(string iterationId,string personId,IReadOnlyList<DateRange> daysOff,CancellationToken ct=default)=>Active.SetDaysOffAsync(iterationId,personId,daysOff,ct);
  public Task<IReadOnlyList<AzureProject>> ProjectsAsync(CancellationToken ct=default)=>Active.ProjectsAsync(ct);
  public Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default)=>Active.RepositoriesAsync(project,ct);
  public Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default)=>Active.BranchesAsync(project,repositoryId,ct);
  public Task<IReadOnlyList<string>> PipelineYamlFilesAsync(string project,string repositoryId,string branch,CancellationToken ct=default)=>Active.PipelineYamlFilesAsync(project,repositoryId,branch,ct);
  public Task<PipelineApprovalList> PendingPipelineApprovalsAsync(string project,CancellationToken ct=default)=>Active.PendingPipelineApprovalsAsync(project,ct);
  public Task ApprovePipelineAsync(string project,string approvalId,CancellationToken ct=default)=>Active.ApprovePipelineAsync(project,approvalId,ct);
+ public Task<PipelineActivitySnapshot> PipelineActivityAsync(string project,int failedDays=5,CancellationToken ct=default)=>Active.PipelineActivityAsync(project,failedDays,ct);
  public Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default)=>Active.PipelinesAsync(project,ct);
  public Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default)=>Active.CreatePipelinesAsync(project,repositoryId,branch,pipelines,ct);
+ public Task<IReadOnlyList<AzureEnvironment>> EnvironmentsAsync(string project,CancellationToken ct=default)=>Active.EnvironmentsAsync(project,ct);
+ public Task<IReadOnlyList<EnvironmentDeployment>> EnvironmentDeploymentsAsync(string project,int environmentId,int days=14,CancellationToken ct=default)=>Active.EnvironmentDeploymentsAsync(project,environmentId,days,ct);
  public Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default)=>Active.DeleteBranchesAsync(project,repositoryId,branches,ct);
  public Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default)=>Active.PullRequestsAsync(project,repositoryId,ct);
  public Task<IReadOnlyList<GitPullRequestSignal>> PullRequestSignalsAsync(string project,string repositoryId,CancellationToken ct=default)=>Active.PullRequestSignalsAsync(project,repositoryId,ct);

@@ -15,14 +15,18 @@ public interface IWorkTracker {
  Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default);
  Task ReorderSprintAsync(string iterationId,string iterationPath,int id,int previousId,int nextId,CancellationToken ct=default);
  Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default);
+ Task SetDaysOffAsync(string iterationId,string personId,IReadOnlyList<DateRange> daysOff,CancellationToken ct=default);
  Task<IReadOnlyList<AzureProject>> ProjectsAsync(CancellationToken ct=default);
  Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default);
  Task<IReadOnlyList<GitBranch>> BranchesAsync(string project,string repositoryId,CancellationToken ct=default);
  Task<IReadOnlyList<string>> PipelineYamlFilesAsync(string project,string repositoryId,string branch,CancellationToken ct=default);
  Task<PipelineApprovalList> PendingPipelineApprovalsAsync(string project,CancellationToken ct=default);
  Task ApprovePipelineAsync(string project,string approvalId,CancellationToken ct=default);
+ Task<PipelineActivitySnapshot> PipelineActivityAsync(string project,int failedDays=5,CancellationToken ct=default);
  Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default);
  Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default);
+ Task<IReadOnlyList<AzureEnvironment>> EnvironmentsAsync(string project,CancellationToken ct=default);
+ Task<IReadOnlyList<EnvironmentDeployment>> EnvironmentDeploymentsAsync(string project,int environmentId,int days=14,CancellationToken ct=default);
  Task<IReadOnlyList<BranchDeleteResult>> DeleteBranchesAsync(string project,string repositoryId,IReadOnlyList<BranchDeleteRequest> branches,CancellationToken ct=default);
  Task<IReadOnlyList<GitPullRequest>> PullRequestsAsync(string project,string repositoryId,CancellationToken ct=default);
  Task<IReadOnlyList<GitPullRequestSignal>> PullRequestSignalsAsync(string project,string repositoryId,CancellationToken ct=default);
@@ -57,3 +61,7 @@ public sealed record PipelineCreateResult(string Name,bool Success,int? Id,strin
 
 public sealed record PipelineApproval(string Id,string Pipeline,string Run,string Stage,string Url,bool CanApprove,string Instructions);
 public sealed record PipelineApprovalList(IReadOnlyList<PipelineApproval> Items,string Warning="");
+public sealed record PipelineRunSummary(int Id,string Pipeline,string Run,string Project,string Branch,string Status,string Result,string CurrentStage,string FailedStage,DateTimeOffset? StartTime,DateTimeOffset? FinishTime,string Url);
+public sealed record PipelineActivitySnapshot(IReadOnlyList<PipelineRunSummary> Running,IReadOnlyList<PipelineRunSummary> Failed);
+public sealed record AzureEnvironment(int Id,string Name,string Description,string CreatedBy,DateTimeOffset? ModifiedOn,string Url);
+public sealed record EnvironmentDeployment(int Id,int EnvironmentId,string Definition,string Run,string Branch,string Stage,string Job,string Status,string Result,DateTimeOffset? StartTime,DateTimeOffset? FinishTime,string Url);

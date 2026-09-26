@@ -3,7 +3,7 @@ namespace SprintPilot.Domain;
 public enum PlanningHorizon { Current, Next, NextWeek, Backlog, Total }
 public enum TagDimension { Application, Initiative }
 public enum TagAllocation { SplitEvenly, FullMembership }
-public sealed record TagClassification(string Tag, bool Application, bool Initiative);
+public sealed record TagClassification(string Tag, bool Application, bool Initiative, bool ApplicationMyScope = false, bool InitiativeMyScope = false);
 public sealed record CapacityTarget(double Minimum = 50, double Maximum = 60);
 public sealed class PlanningSettings
 {
@@ -15,8 +15,10 @@ public sealed class PlanningSettings
     public CapacityTarget DefaultTarget { get; set; } = new();
     // Persistent per-person sprint capacity. When absent, DefaultTarget.Maximum (60h) is used.
     public Dictionary<string, double> PersonCapacityHours { get; set; } = new();
-    // Public-holiday calendar key per immutable person identity (for example BE, CA, CA-QC, PL, CZ or DE).
+    // Legacy single public-holiday calendar. Kept for preferences migration.
     public Dictionary<string, string> HolidayCalendarByPerson { get; set; } = new();
+    // One person may follow multiple calendars, for example Canada + Québec.
+    public Dictionary<string, string[]> HolidayCalendarsByPerson { get; set; } = new();
     // Keys are immutable identity ID + iteration ID; a sprint-specific override wins over the person's default.
     public Dictionary<string, CapacityTarget> CapacityOverrides { get; set; } = new();
     public static string CapacityKey(string personId, string iterationId) => personId + ":" + iterationId;
