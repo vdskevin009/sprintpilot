@@ -92,7 +92,7 @@ public sealed partial class AzureTracker
    var branch=StripHead(S(n?["sourceBranch"]));if(branch=="")branch=StripHead(S(n?["run"]?["sourceBranch"]));
    var status=S(n?["status"]);var result=S(n?["result"]);
    var url=S(n?["_links"]?["web"]?["href"]);if(url=="")url=S(n?["run"]?["_links"]?["web"]?["href"]);
-   return new EnvironmentDeployment(n?["id"]?.GetValue<int>()??0,environmentId,definition,run,branch,status,result,start,finish,url);
+   return new EnvironmentDeployment(n?["id"]?.GetValue<int>()??0,environmentId,definition,run,branch,S(n?["stageName"]),S(n?["jobName"]),status,result,start,finish,url);
   }).Where(x=>(x.FinishTime??x.StartTime??DateTimeOffset.MinValue)>=cutoff).OrderByDescending(x=>x.FinishTime??x.StartTime).ToArray();
  }
 }
