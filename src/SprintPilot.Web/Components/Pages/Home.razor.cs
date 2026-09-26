@@ -94,7 +94,7 @@ public partial class Home {
  }}
  string DialogTitle=>dialog switch{"palette"=>"Commands","iterations"=>"Choose sprint","columns"=>"Visible columns","saveview"=>"Save view","bulk"=>"Edit selected items","review"=>"Review changes","ai"=>"AI review","prompt"=>"Copilot prompt","create"=>"New work item","smartorder"=>"Smart order preview","smartfix"=>"Smart Fix","magic"=>"Magic Orchestration","branchdelete"=>"Review branch deletion","prabandon"=>"Review pull request cleanup",_=>"SprintPilot"};
  string BulkLabel=>bulkKind switch{"AddTag"=>"Tag to add","RemoveTag"=>"Tag to remove","Next" or "Previous" or "Iteration"=>"Target sprint",_=>bulkKind};
- protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
+ protected override async Task OnInitializedAsync(){try{prefs=await Preferences.LoadAsync(lifetime.Token);quickPbiOwner=prefs.LastBacklogOwner;prefs.QualityWeights.Remove("Parent");blockedTagsText=string.Join("\n",prefs.BlockedTags);LoadTemplate();var c=await Credentials.GetAsync(lifetime.Token);if(c is not null){connection=c.Connection;organization=connection.Organization;project=connection.Project;await LoadWorkspace();}}catch(Exception e){Error(e);}finally{initializing=false;}}
  protected override async Task OnAfterRenderAsync(bool first){if(first){reference=DotNetObjectReference.Create(this);await JS.InvokeVoidAsync("sprintPilot.init",reference);_=CheckForAppUpdate();}if(!initializing&&!themeRestored){themeRestored=true;await RestoreTheme();}if(focusDialog){focusDialog=false;await JS.InvokeVoidAsync("sprintPilot.dialog");}if(pendingOrderHighlightId is {} movedId){pendingOrderHighlightId=null;await JS.InvokeVoidAsync("sprintPilot.orderDropSuccess",movedId);}}
  async Task ApplyTheme()=>await JS.InvokeVoidAsync("sprintPilot.theme",prefs.Theme,true);
  async Task SaveTheme(){
@@ -340,8 +340,12 @@ public partial class Home {
   var area=meta.Scope.FirstOrDefault()?.Path??meta.Areas.FirstOrDefault()??"";
   quickPbiCreating=true;
   try{
-   var created=await Tracker.CreateAsync(type.Name,[new(ItemField.Title,title),new(ItemField.Area,area),new(ItemField.Iteration,iteration.Path)],null,lifetime.Token);
-   quickPbiCreatedId=created.Id;quickPbiTitle="";quickPbiIteration=iteration.Path;sprintCache.Clear();
+   var changes=new List<Change>{new(ItemField.Title,title),new(ItemField.Area,area),new(ItemField.Iteration,iteration.Path)};
+   if(quickPbiOwner!="")changes.Add(new(ItemField.Owner,quickPbiOwner));
+   if(quickPbiApplication!="")changes.Add(new(ItemField.Tags,quickPbiApplication));
+   var created=await Tracker.CreateAsync(type.Name,changes,null,lifetime.Token);
+   prefs.LastBacklogOwner=quickPbiOwner;await Preferences.SaveAsync(prefs,lifetime.Token);
+   quickPbiCreatedId=created.Id;quickPbiTitle="";quickPbiApplication="";quickPbiApplicationPinned=false;quickPbiIteration=iteration.Path;sprintCache.Clear();
    if(created.Iteration.Equals(CurrentSprint?.Path,StringComparison.OrdinalIgnoreCase)){items.Add(created);items=items.OrderBy(w=>w.Order??double.MaxValue).ThenBy(w=>w.Id).ToList();}
    if(Planning.IsPlanningType(created.Type,PlanningPrefs))planningItems.Add(created);
    Notify($"#{created.Id} created in {iteration.Name}.");
