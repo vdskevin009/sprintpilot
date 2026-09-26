@@ -8,6 +8,7 @@ public partial class Home
 {
  string homeModal="",homeModalTitle="",homeModalIterationPath="",homeModalOwnerId="",homeModalApplicationFilter="",homeModalOwnerFilter="",homeModalError="";
  string homeAddTitle="",homeAddOwner="",homeAddApplication="",homeAddError="";
+ string quickPbiOwner="",quickPbiApplication="";bool quickPbiApplicationPinned;
  bool homeModalLoading,homeModalApplying,homeAddCreating,homeAddApplicationPinned;
  readonly HashSet<int> homeModalSelection=[];
  List<WorkItem> homeModalItems=[];
@@ -111,6 +112,9 @@ public partial class Home
   if(!homeAddApplicationPinned)homeAddApplication=SuggestApplication(homeAddTitle);
  }
  void HomeAddApplicationChanged(ChangeEventArgs e){homeAddApplication=e.Value?.ToString()??"";homeAddApplicationPinned=homeAddApplication!="";}
+ void QuickPbiTitleChanged(ChangeEventArgs e){quickPbiTitle=e.Value?.ToString()??"";if(!quickPbiApplicationPinned)quickPbiApplication=SuggestApplication(quickPbiTitle);}
+ void QuickPbiApplicationChanged(ChangeEventArgs e){quickPbiApplication=e.Value?.ToString()??"";quickPbiApplicationPinned=quickPbiApplication!="";}
+ void QuickPbiOwnerChanged(ChangeEventArgs e){quickPbiOwner=e.Value?.ToString()??"";prefs.LastBacklogOwner=quickPbiOwner;}
  string SuggestApplication(string title)
  {
   var apps=ApplicationTags();if(prefs.MyScopeOnly&&MyScopeApplications().Length>0)apps=apps.Where(a=>MyScopeApplications().Contains(a,StringComparer.OrdinalIgnoreCase)).ToArray();
