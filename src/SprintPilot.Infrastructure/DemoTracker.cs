@@ -31,6 +31,7 @@ public sealed class DemoTracker:IWorkTracker {
  public Task<Metadata> MetadataAsync(bool refresh=false,CancellationToken ct=default)=>Task.FromResult(metadata);
  public Task<IReadOnlyList<WorkItem>> SprintAsync(string iteration,CancellationToken ct=default){lock(sync){var rows=items.Values.Where(i=>i.Iteration==iteration).OrderBy(i=>i.Order??double.MaxValue).ThenBy(i=>i.Id).Select((w,i)=>w with{Order=i+1}).ToArray();return Task.FromResult<IReadOnlyList<WorkItem>>(rows);}}
  public Task ReorderSprintAsync(string iterationId,string iterationPath,int id,int previousId,int nextId,CancellationToken ct=default){lock(sync){var rows=items.Values.Where(i=>i.Iteration==iterationPath).OrderBy(i=>i.Order??double.MaxValue).ThenBy(i=>i.Id).ToList();var item=rows.FirstOrDefault(i=>i.Id==id)??throw new TrackerException("Demo sprint item not found.");rows.Remove(item);var index=previousId==0?0:rows.FindIndex(i=>i.Id==previousId)+1;if(nextId!=0){var next=rows.FindIndex(i=>i.Id==nextId);if(next>=0)index=next;}index=Math.Clamp(index,0,rows.Count);rows.Insert(index,item);for(var i=0;i<rows.Count;i++)items[rows[i].Id]=rows[i] with{Order=i+1};return Task.CompletedTask;}}
+ public Task SetDaysOffAsync(string iterationId,string personId,IReadOnlyList<DateRange> daysOff,CancellationToken ct=default)=>Task.CompletedTask;
  public Task<SprintCapacity> CapacityAsync(string iterationId,CancellationToken ct=default){var sprint=metadata.Iterations.FirstOrDefault(i=>i.Id==iterationId);if(sprint?.Start is not {} start)return Task.FromResult(new SprintCapacity([],[]));var members=metadata.People.Select((p,i)=>new MemberCapacity(p.Id,p.Name,i==1?[new DateRange(start.AddDays(3),start.AddDays(3))]:[],6)).ToArray();return Task.FromResult(new SprintCapacity(members,[]));}
  public Task<IReadOnlyList<AzureProject>> ProjectsAsync(CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<AzureProject>>([new("demo","SprintPilot"),new("archive","Archive tools")]);
  public Task<IReadOnlyList<GitRepository>> RepositoriesAsync(string project,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<GitRepository>>(project=="Archive tools"?[new("archive-repo","Migration archive","main")]:[new("demo-repo","SprintPilot","main"),new("demo-api","Pablo API","main")]);
@@ -55,6 +56,24 @@ public sealed class DemoTracker:IWorkTracker {
  public Task ApprovePipelineAsync(string project,string approvalId,CancellationToken ct=default){
   if(approvalId!="demo-preprod")throw new TrackerException("You cannot approve this stage.");
   lock(sync)approvedDemoPipelines.Add(approvalId);return Task.CompletedTask;
+ }
+ public Task<PipelineActivitySnapshot> PipelineActivityAsync(string project,int failedDays=5,CancellationToken ct=default){
+  var now=DateTimeOffset.UtcNow;
+  IReadOnlyList<PipelineRunSummary> running=[new(501,"Deploy SprintPilot","20260925.4",project,"main","inProgress","","Deploy pre-prod","",now.AddMinutes(-8),null,"https://dev.azure.com/example/demo/_build/results?buildId=501")];
+  IReadOnlyList<PipelineRunSummary> failed=[new(498,"API validation","20260924.2",project,"feature/contracts","completed","failed","","Integration tests",now.AddDays(-1).AddMinutes(-12),now.AddDays(-1),"https://dev.azure.com/example/demo/_build/results?buildId=498")];
+  return Task.FromResult(new PipelineActivitySnapshot(running,failed));
+ }
+ public Task<IReadOnlyList<AzureEnvironment>> EnvironmentsAsync(string project,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<AzureEnvironment>>([
+  new(1,"Pre-Prod","Shared validation environment","Demo Admin",DateTimeOffset.UtcNow.AddDays(-1),"https://dev.azure.com/example/demo/_environments/1"),
+  new(2,"Prod","Production","Release Admin",DateTimeOffset.UtcNow.AddDays(-4),"https://dev.azure.com/example/demo/_environments/2"),
+  new(3,"DR","Disaster recovery","DR Admin",DateTimeOffset.UtcNow.AddDays(-7),"https://dev.azure.com/example/demo/_environments/3")
+ ]);
+ public Task<IReadOnlyList<EnvironmentDeployment>> EnvironmentDeploymentsAsync(string project,int environmentId,int days=14,CancellationToken ct=default){
+  var now=DateTimeOffset.UtcNow;
+  return Task.FromResult<IReadOnlyList<EnvironmentDeployment>>([
+   new(environmentId*100+1,environmentId,"Deploy application",$"202609{environmentId}.1","main","completed","succeeded",now.AddDays(-environmentId).AddMinutes(-15),now.AddDays(-environmentId),"https://dev.azure.com/example/demo/_build/results"),
+   new(environmentId*100+2,environmentId,"Deploy application",$"202609{environmentId}.0","release","completed",environmentId==2?"failed":"succeeded",now.AddDays(-environmentId-3).AddMinutes(-20),now.AddDays(-environmentId-3),"https://dev.azure.com/example/demo/_build/results")
+  ]);
  }
  public Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<PipelineDefinition>>(Array.Empty<PipelineDefinition>());
  public Task<IReadOnlyList<PipelineCreateResult>> CreatePipelinesAsync(string project,string repositoryId,string branch,IReadOnlyList<PipelineCreateRequest> pipelines,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<PipelineCreateResult>>(pipelines.Select((p,i)=>new PipelineCreateResult(p.Name,true,1000+i,null)).ToArray());
