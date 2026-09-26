@@ -64,4 +64,4 @@ public sealed record PipelineApprovalList(IReadOnlyList<PipelineApproval> Items,
 public sealed record PipelineRunSummary(int Id,string Pipeline,string Run,string Project,string Branch,string Status,string Result,string CurrentStage,string FailedStage,DateTimeOffset? StartTime,DateTimeOffset? FinishTime,string Url);
 public sealed record PipelineActivitySnapshot(IReadOnlyList<PipelineRunSummary> Running,IReadOnlyList<PipelineRunSummary> Failed);
 public sealed record AzureEnvironment(int Id,string Name,string Description,string CreatedBy,DateTimeOffset? ModifiedOn,string Url);
-public sealed record EnvironmentDeployment(int Id,int EnvironmentId,string Definition,string Run,string Branch,string Status,string Result,DateTimeOffset? StartTime,DateTimeOffset? FinishTime,string Url);
+public sealed record EnvironmentDeployment(int Id,int EnvironmentId,string Definition,string Run,string Branch,string Stage,string Job,string Status,string Result,DateTimeOffset? StartTime,DateTimeOffset? FinishTime,string Url);
