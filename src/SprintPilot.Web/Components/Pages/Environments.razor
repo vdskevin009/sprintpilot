@@ -68,6 +68,8 @@
  <div class="pipeline-run-detail-grid">
   <span><small>Result</small><strong>@(d.Result==""?d.Status:d.Result)</strong></span>
   <span><small>Branch</small><strong>@(d.Branch==""?"—":d.Branch)</strong></span>
+  <span><small>Stage</small><strong>@(d.Stage==""?"—":d.Stage)</strong></span>
+  <span><small>Job</small><strong>@(d.Job==""?"—":d.Job)</strong></span>
   <span><small>Started</small><strong>@(d.StartTime?.ToLocalTime().ToString("MMM d, HH:mm")??"—")</strong></span>
   <span><small>Finished</small><strong>@(d.FinishTime?.ToLocalTime().ToString("MMM d, HH:mm")??"—")</strong></span>
  </div>
