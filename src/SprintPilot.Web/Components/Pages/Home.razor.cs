@@ -12,8 +12,9 @@ public partial class Home {
  [Inject] public NavigationManager Navigation {get;set;}=default!;
  PlanningPage? planner;PipelineApprovals? pipelineApprovals;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
- string organization="",project="",token="",screen="home",message="",dialog="",dialogError="";
+ string organization="",project="",token="",screen="home",message="",dialog="",dialogError="",deliveryProjectId="";
  bool themeRestored;bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,quickPbiCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
+ void DeliveryProjectChanged(string projectId)=>deliveryProjectId=projectId;
  bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported,branchCleanupLoading,branchDeleting,pullRequestCleanupLoading,pullRequestAbandoning;
  string attentionFilter="",classificationTag="",dailyLookupText="",dailyTagText="",dailyCommentText="",dailyFocusOwner="",filterOptionSearch="",holidayCountryFilter="ALL";string? workspacePriorityOwner;
  string meetingTitle="",meetingNotes="",meetingCopilotText="",meetingError="",meetingWorkType="";
