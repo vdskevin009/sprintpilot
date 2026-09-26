@@ -1,8 +1,15 @@
 @inject TrackerSession Tracker
+@inject SprintPilot.Infrastructure.PipelineApprovalSelectionStore SelectionStore
 @implements IDisposable
 
 <section class="home-card pr-status-card" aria-label="Pull request status by application">
-<header><div><span class="eyebrow">Code flow</span><h2>Active pull requests <span class="home-card-count">@AllPullRequests.Count</span></h2><small>@(MyScopeOnly?"My Scope applications":"Repositories in the selected project")</small></div><button disabled="@loading" @onclick="Load">↻ Refresh</button></header>
+<header><div><span class="eyebrow">Code flow</span><h2>Active pull requests <span class="home-card-count">@AllPullRequests.Count</span></h2><small>@(MyScopeOnly?"My Scope applications":"Repositories in the selected project")</small></div><button disabled="@loading" @onclick="Refresh">↻ Refresh</button></header>
+<label class="pr-project-picker">Project
+<select aria-label="Pull request project" value="@selectedProjectId" disabled="@(loading||projects.Count==0)" @onchange="ChangeProject">
+@if(projects.Count==0){<option value="">No projects available</option>}
+@foreach(var project in projects){<option value="@project.Id">@project.Name</option>}
+</select></label>
+@if(selectionNotice!=""){<div class="repository-monitor-status muted">@selectionNotice</div>}
 @if(loading){<div class="repository-monitor-status">Loading active pull requests…</div>}
 @if(error!=""){<div class="repository-monitor-status muted">@error</div>}
 @if(!loading&&Groups.Count==0){<div class="home-empty">No active pull requests found.</div>}
@@ -24,10 +31,16 @@
 @if(selectedGroup is {} selected){
 <div class="scrim" @onclick="Close"><section class="dialog wide pr-status-dialog" role="dialog" aria-modal="true" aria-label="Pull requests" @onclick:stopPropagation>
 <header><div><h2>@selected.Application</h2><small>@selected.Items.Count active pull request(s)</small></div><button aria-label="Close" @onclick="Close">×</button></header>
+<div class="cleanup-pills pr-modal-apps" aria-label="Applications">
+ @foreach(var group in Groups){
+  <button class="cleanup-pill @(selectedGroup?.Application==group.Application?"active":"")" aria-pressed="@(selectedGroup?.Application==group.Application)" @onclick="()=>SelectGroup(group)">@group.Application <strong>@group.Items.Count</strong></button>
+ }
+</div>
 <div class="pr-modal-layout">
  <div class="pr-modal-list">
  @foreach(var pr in selected.Items){
-  <button class="@(selectedPr?.Id==pr.Id?"active":"")" @onclick="()=>selectedPr=pr">
+  var active=selectedPr?.Id==pr.Id;
+  <button class="@(active?"active":"")" aria-current="@(active?"true":null)" style="@(active?"border-color:var(--accent);background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)":"")" @onclick="()=>selectedPr=pr">
    <span><strong>#@pr.Id · @pr.Title</strong><small>@pr.SourceBranch → @pr.TargetBranch</small></span>
    <em class="@(Blocked(pr)?"failed":Ready(pr)?"ready":"")">@PrState(pr)</em>
   </button>
@@ -45,29 +58,76 @@
 
 @code {
  [Parameter] public string Project{get;set;}="";
+ [Parameter] public string Organization{get;set;}="";
+ [Parameter] public string SelectedProject{get;set;}="";
+ [Parameter] public EventCallback<string> SelectedProjectChanged{get;set;}
  [Parameter] public bool MyScopeOnly{get;set;}
  [Parameter] public string[] ScopeApplications{get;set;}=[];
  readonly CancellationTokenSource lifetime=new();
- bool loading,disposed;string error="";List<AppPrGroup> Groups=[];AppPrGroup? selectedGroup;GitPullRequest? selectedPr;
+ bool loading,disposed;string error="",selectionNotice="",selectedProjectId="";
+ List<AzureProject> projects=[];List<AppPrGroup> Groups=[];AppPrGroup? selectedGroup;GitPullRequest? selectedPr;
  List<GitPullRequest> AllPullRequests=>Groups.SelectMany(x=>x.Items).ToList();
- protected override Task OnInitializedAsync()=>Load();
- protected override async Task OnParametersSetAsync(){if(!loading&&Groups.Count>0)ApplyScope();await Task.CompletedTask;}
- async Task Load(){
-  if(loading||disposed||string.IsNullOrWhiteSpace(Project))return;loading=true;error="";selectedGroup=null;selectedPr=null;
+
+ protected override Task OnInitializedAsync()=>Refresh();
+ protected override async Task OnParametersSetAsync(){
+  if(disposed||loading||string.IsNullOrWhiteSpace(SelectedProject)||SelectedProject==selectedProjectId||projects.Count==0){if(!loading&&Groups.Count>0)ApplyScope();return;}
+  if(!projects.Any(p=>p.Id.Equals(SelectedProject,StringComparison.OrdinalIgnoreCase)))return;
+  selectedProjectId=SelectedProject;selectionNotice="";await LoadSelectedProject();
+ }
+
+ async Task Refresh(){
+  if(loading||disposed)return;loading=true;error="";selectionNotice="";
   try{
-   var repos=await Tracker.RepositoriesAsync(Project,lifetime.Token);var groups=new List<AppPrGroup>();
-   foreach(var repo in repos){
-    lifetime.Token.ThrowIfCancellationRequested();
-    try{
-     var prs=(await Tracker.PullRequestsAsync(Project,repo.Id,lifetime.Token)).OrderByDescending(x=>x.CreatedDate).ToList();
-     if(prs.Count>0)groups.Add(Build(repo.Name,prs));
-    }catch(TrackerException e){if(error=="")error=$"{repo.Name}: {e.Message}";}
+   projects=(await Tracker.ProjectsAsync(lifetime.Token)).OrderBy(p=>p.Name,StringComparer.OrdinalIgnoreCase).ToList();
+   var remembered=!string.IsNullOrWhiteSpace(SelectedProject)?SelectedProject:Tracker.Demo?null:await SelectionStore.LoadAsync(Organization,lifetime.Token);
+   var chosen=projects.FirstOrDefault(p=>p.Id.Equals(remembered,StringComparison.OrdinalIgnoreCase));
+   if(chosen is null){
+    chosen=projects.FirstOrDefault(p=>p.Id.Equals(Project,StringComparison.OrdinalIgnoreCase)||p.Name.Equals(Project,StringComparison.OrdinalIgnoreCase))??projects.FirstOrDefault();
+    if(!string.IsNullOrEmpty(remembered))selectionNotice="The saved project is no longer accessible. Choose an available project.";
    }
-   Groups=groups;ApplyScope();
+   selectedProjectId=chosen?.Id??"";
+   if(selectedProjectId!=""&&SelectedProject!=selectedProjectId)await SelectedProjectChanged.InvokeAsync(selectedProjectId);
+   await LoadGroups(selectedProjectId);
   }catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
   catch(Exception e){error=e is TrackerException?e.Message:"Pull requests could not be loaded.";}
   finally{loading=false;}
  }
+
+ async Task ChangeProject(ChangeEventArgs e){
+  if(loading||disposed)return;
+  var id=e.Value?.ToString()??"";
+  if(!projects.Any(p=>p.Id==id))return;
+  selectedProjectId=id;selectionNotice="";error="";
+  if(SelectedProject!=id)await SelectedProjectChanged.InvokeAsync(id);
+  try{if(!Tracker.Demo)await SelectionStore.SaveAsync(Organization,id,lifetime.Token);}
+  catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch{selectionNotice="This project is selected, but could not be saved for next time.";}
+  await LoadSelectedProject();
+ }
+
+ async Task LoadSelectedProject(){
+  if(loading||disposed||selectedProjectId=="")return;
+  loading=true;error="";selectedGroup=null;selectedPr=null;
+  try{await LoadGroups(selectedProjectId);}
+  catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch(Exception e){error=e is TrackerException?e.Message:"Pull requests could not be loaded.";}
+  finally{loading=false;}
+ }
+
+ async Task LoadGroups(string project){
+  if(string.IsNullOrWhiteSpace(project)){Groups=[];return;}
+  var repos=await Tracker.RepositoriesAsync(project,lifetime.Token);var groups=new List<AppPrGroup>();string firstError="";
+  foreach(var repo in repos){
+   lifetime.Token.ThrowIfCancellationRequested();
+   try{
+    var prs=(await Tracker.PullRequestsAsync(project,repo.Id,lifetime.Token)).OrderByDescending(x=>x.CreatedDate).ToList();
+    if(prs.Count>0)groups.Add(Build(repo.Name,prs));
+   }catch(TrackerException e){if(firstError=="")firstError=$"{repo.Name}: {e.Message}";}
+  }
+  if(project!=selectedProjectId)return;
+  error=firstError;Groups=groups;ApplyScope();
+ }
+
  AppPrGroup Build(string application,List<GitPullRequest> items)=>new(application,items,items.Count(x=>x.IsDraft),items.Count(Blocked),items.Count(Ready));
  void ApplyScope(){
   if(!MyScopeOnly||ScopeApplications.Length==0){Groups=Groups.OrderByDescending(x=>x.Items.Count).ThenBy(x=>x.Application).ToList();return;}
@@ -77,7 +137,8 @@
  static bool Blocked(GitPullRequest p)=>p.BlockingVoteCount>0||p.MergeStatus.Contains("conflict",StringComparison.OrdinalIgnoreCase)||p.MergeStatus.Contains("failure",StringComparison.OrdinalIgnoreCase)||p.MergeStatus.Contains("rejected",StringComparison.OrdinalIgnoreCase);
  static bool Ready(GitPullRequest p)=>!p.IsDraft&&!Blocked(p)&&p.ApprovalCount>0;
  static string PrState(GitPullRequest p)=>p.IsDraft?"Draft":Blocked(p)?"Blocked":Ready(p)?"Ready":"Review";
- void OpenGroup(AppPrGroup group){selectedGroup=group;selectedPr=group.Items.FirstOrDefault();}
+ void OpenGroup(AppPrGroup group)=>SelectGroup(group);
+ void SelectGroup(AppPrGroup group){selectedGroup=group;if(selectedPr is null||!group.Items.Any(x=>x.Id==selectedPr.Id))selectedPr=group.Items.FirstOrDefault();}
  void Close(){selectedGroup=null;selectedPr=null;}
  static bool SafeLink(string url)=>Uri.TryCreate(url,UriKind.Absolute,out var uri)&&uri.Scheme=="https"&&(uri.Host=="dev.azure.com"||uri.Host.EndsWith(".visualstudio.com",StringComparison.OrdinalIgnoreCase));
  sealed record AppPrGroup(string Application,List<GitPullRequest> Items,int Draft,int Blocked,int Ready);

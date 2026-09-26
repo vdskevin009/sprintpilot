@@ -71,8 +71,8 @@ else if(screen=="home"){
 </div>
 @if(quickPbiError!=""){<p class="quick-add-error">@quickPbiError</p>}
 </section>
-<PipelineApprovals @ref="pipelineApprovals" @key="connection?.Organization" Organization="@(connection?.Organization??"demo")" Project="@(connection?.Project??"SprintPilot")"/>
-<PullRequestStatus @key="prefs.MyScopeOnly" Project="@(connection?.Project??"SprintPilot")" MyScopeOnly="prefs.MyScopeOnly" ScopeApplications="MyScopeApplications()"/>
+<PipelineApprovals @ref="pipelineApprovals" @key="connection?.Organization" Organization="@(connection?.Organization??"demo")" Project="@(connection?.Project??"SprintPilot")" SelectedProject="@deliveryProjectId" SelectedProjectChanged="DeliveryProjectChanged"/>
+<PullRequestStatus @key="prefs.MyScopeOnly" Organization="@(connection?.Organization??"demo")" Project="@(connection?.Project??"SprintPilot")" SelectedProject="@deliveryProjectId" SelectedProjectChanged="DeliveryProjectChanged" MyScopeOnly="prefs.MyScopeOnly" ScopeApplications="MyScopeApplications()"/>
 <div class="home-layout">
 <section class="home-card attention-card"><header><div><span class="eyebrow">Now</span><h2>Needs attention</h2></div><span class="home-card-count">@HomeAttention().Sum(x=>x.Count)</span></header>
 @if(repositoryMonitoringLoading){<div class="repository-monitor-status">Reviewing project repositories…</div>}else if(repositoryMonitoringError!=""){<div class="repository-monitor-status muted">Repository scan partial · @repositoryMonitoringError</div>}

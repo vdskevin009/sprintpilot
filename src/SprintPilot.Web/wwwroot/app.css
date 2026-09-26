@@ -1341,3 +1341,12 @@ html[data-theme=avd] .quick-add-pbi-card{border-color:#d9e0e7!important;box-shad
  .environment-cleanup-head{display:none}
  .environment-cleanup-row{grid-template-columns:1fr}
 }
+
+
+/* Shared delivery-project controls and PR modal selection */
+.pr-status-card .pr-project-picker{display:flex;flex-direction:row;align-items:center;gap:10px;margin:12px 0;font-size:13px}
+.pr-status-card .pr-project-picker select{width:320px;max-width:100%}
+.pr-status-dialog .pr-modal-apps{margin:0 0 .8rem;padding:0 0 .75rem;border-bottom:1px solid var(--border)}
+.pr-status-dialog .pr-modal-list>button.active{border-color:var(--accent);background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)}
+html[data-theme=avd] .pr-status-dialog .pr-modal-list>button.active{box-shadow:inset 3px 0 0 var(--accent)}
+@media(max-width:600px){.pr-status-card .pr-project-picker{align-items:flex-start;flex-direction:column}}
