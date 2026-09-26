@@ -1350,3 +1350,17 @@ html[data-theme=avd] .quick-add-pbi-card{border-color:#d9e0e7!important;box-shad
 .pr-status-dialog .pr-modal-list>button.active{border-color:var(--accent);background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)}
 html[data-theme=avd] .pr-status-dialog .pr-modal-list>button.active{box-shadow:inset 3px 0 0 var(--accent)}
 @media(max-width:600px){.pr-status-card .pr-project-picker{align-items:flex-start;flex-direction:column}}
+
+
+/* People-first availability and explicit sprint capacity impact. */
+.people-first-time-off{align-items:flex-start!important}
+.time-off-person-block{flex:1;display:flex!important;flex-direction:column!important;gap:4px!important}
+.time-off-people{font-size:13px;line-height:1.25;font-weight:750;color:var(--text)}
+.time-off-meta{display:flex!important;flex-direction:row!important;align-items:center;gap:6px;flex-wrap:wrap}
+.time-off-meta>small{margin:0!important;color:var(--muted);font-size:10px}
+.people-first-time-off time{padding-top:2px;color:var(--muted)}
+.people-first-leave{display:grid;grid-template-columns:minmax(140px,1fr) auto;gap:2px 8px;align-items:center;min-width:210px;max-width:320px;border-radius:8px;white-space:normal;padding:6px 8px}
+.people-first-leave>strong{font-size:11px;line-height:1.2;overflow-wrap:anywhere}
+.people-first-leave>small{grid-column:1 / -1;color:var(--muted);font-size:9px;line-height:1.25}
+.people-first-leave>em{grid-column:2;grid-row:1;white-space:nowrap}
+.capacity-time-off-badge{display:inline-flex;margin-top:5px;padding:3px 6px;border-radius:999px;border:1px solid color-mix(in srgb,#f59e0b 42%,var(--border));background:color-mix(in srgb,#f59e0b 12%,transparent);color:#d48a16;font-size:9px;font-style:normal;font-weight:700;line-height:1}

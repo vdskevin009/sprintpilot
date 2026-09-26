@@ -12,7 +12,7 @@ public partial class Home {
  [Inject] public NavigationManager Navigation {get;set;}=default!;
  PlanningPage? planner;PipelineApprovals? pipelineApprovals;
  Preferences prefs=new();Metadata? meta;ConnectionInfo? connection;Person? testUser;
- string organization="",project="",token="",screen="home",message="",dialog="",dialogError="",deliveryProjectId="";
+ string organization="",project="",token="",screen="home",message="",dialog="",dialogError="",deliveryProjectId="",loadedSprintPath="";
  bool themeRestored;bool focusDialog;bool initializing=true,connecting,hasError,loading,applying,moreFilters,descending,disposed,showAllDaysOff,dailyLookupBusy,dailyPanelLoading,dailyActiveOnly,smartOrdering,meetingCreating,quickPbiCreating,workspaceActiveOnly,workspaceBlockedOnly,workspaceOwnerMode,detailSaving,repositoryMonitoringLoading;
  void DeliveryProjectChanged(string projectId)=>deliveryProjectId=projectId;
  bool pwaInstallAvailable,pwaInstalled,appUpdateAvailable,appUpdateChecking,appUpdating,appUpdateSupported,branchCleanupLoading,branchDeleting,pullRequestCleanupLoading,pullRequestAbandoning;
@@ -131,12 +131,38 @@ public partial class Home {
   if(connection is not null&&prefs.LastTeams.TryGetValue(TeamPreferenceKey(connection),out var remembered)&&remembered!=""&&!remembered.Equals(connection.Team,StringComparison.OrdinalIgnoreCase)){var current=await Credentials.GetAsync(lifetime.Token);if(current is not null){connection=current.Connection with{Team=remembered};await Credentials.SaveAsync(new(connection,current.Token),lifetime.Token);}}
   meta=await Tracker.MetadataAsync(true,lifetime.Token);
   if(connection is not null){var team=meta.Teams.FirstOrDefault(t=>t.Id.Equals(connection.Team,StringComparison.OrdinalIgnoreCase)||t.Name.Equals(connection.Team,StringComparison.OrdinalIgnoreCase))??meta.Teams[0];if(!connection.Team.Equals(team.Id,StringComparison.OrdinalIgnoreCase)){var current=await Credentials.GetAsync(lifetime.Token);connection=connection with{Team=team.Id};if(current is not null)await Credentials.SaveAsync(new(connection,current.Token),lifetime.Token);}await RememberTeam(connection);}
-  var now=DateTimeOffset.UtcNow;sprintIndex=Array.FindIndex(meta.Iterations,i=>i.Start<=now&&i.Finish?.AddDays(1)>now);if(sprintIndex<0)sprintIndex=0;screen="home";sprintCache.Clear();capacityByIteration.Clear();selected.Clear();drafts.Clear();previousItems=[];related=[];detail=null;dailyPanelItem=null;await LoadSprint();await LoadFutureCapacities(lifetime.Token);await LoadPlanningItems(lifetime.Token);await LoadCalendarHolidays(lifetime.Token);await LoadRepositoryAttention(lifetime.Token);
+  var now=DateTimeOffset.UtcNow;sprintIndex=Array.FindIndex(meta.Iterations,i=>i.Start<=now&&i.Finish?.AddDays(1)>now);if(sprintIndex<0)sprintIndex=0;screen="home";sprintCache.Clear();capacityByIteration.Clear();selected.Clear();drafts.Clear();items=[];loadedSprintPath="";previousItems=[];related=[];detail=null;dailyPanelItem=null;await LoadSprint();await LoadFutureCapacities(lifetime.Token);await LoadPlanningItems(lifetime.Token);await LoadCalendarHolidays(lifetime.Token);await LoadRepositoryAttention(lifetime.Token);
  }catch(Exception e){Error(e);}finally{loading=false;}}
  async Task LoadPlanningItems(CancellationToken ct){try{var rows=await Tracker.PlanningAsync(meta!.Types.Where(t=>t.Name!="Task").Select(t=>t.Name).ToArray(),ct);planningItems=rows.ToList();tagHistory=planningItems.Where(w=>w.Changed>=DateTimeOffset.UtcNow.AddMonths(-6)).ToList();}catch(OperationCanceledException){throw;}catch{planningItems=[];tagHistory=[];}}
- async Task LoadSprint(bool refreshMetadata=false){refreshToken.Cancel();refreshToken.Dispose();refreshToken=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var ct=refreshToken.Token;var iteration=CurrentSprint;if(iteration is null){items=[];Notify("This team has no configured iterations. Configure them in Azure DevOps, then refresh.");return;}
-  loading=true;if(sprintCache.TryGetValue(iteration.Path,out var hit))items=[..hit];else items=[];previousItems=[];related=[];await InvokeAsync(StateHasChanged);
-  try{if(refreshMetadata)meta=await Tracker.MetadataAsync(true,ct);var fetched=await Tracker.SprintAsync(iteration.Path,ct);try{sprintCapacity=await Tracker.CapacityAsync(iteration.Id,ct);capacityByIteration[iteration.Id]=sprintCapacity;}catch(TrackerException){sprintCapacity=new([],[]);}ct.ThrowIfCancellationRequested();items=fetched.ToList();sprintCache[iteration.Path]=[..items];if(quickView=="Carry-over"||screen=="cleanup")await LoadPrevious(ct);if(screen=="cleanup")await LoadRelated(ct);}catch(OperationCanceledException){if(!ct.IsCancellationRequested)Notify("Refresh timed out. Try again.");}catch(Exception e){if(!ct.IsCancellationRequested)Error(e);}finally{if(!ct.IsCancellationRequested)loading=false;}}
+ async Task LoadSprint(bool refreshMetadata=false){
+  refreshToken.Cancel();refreshToken.Dispose();refreshToken=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var ct=refreshToken.Token;
+  var previousItemsSnapshot=items.ToList();var previousIterationPath=loadedSprintPath;string? targetPath=null;
+  loading=true;
+  try{
+   if(refreshMetadata){
+    var selectedPath=CurrentSprint?.Path;
+    meta=await Tracker.MetadataAsync(true,ct);
+    if(selectedPath is not null){
+     var refreshedIndex=Array.FindIndex(meta.Iterations,i=>i.Path.Equals(selectedPath,StringComparison.OrdinalIgnoreCase));
+     if(refreshedIndex>=0)sprintIndex=refreshedIndex;
+     else if(meta.Iterations.Length>0)sprintIndex=Math.Clamp(sprintIndex,0,meta.Iterations.Length-1);
+    }
+   }
+   var iteration=CurrentSprint;targetPath=iteration?.Path;
+   if(iteration is null){items=[];loadedSprintPath="";Notify("This team has no configured iterations. Configure them in Azure DevOps, then refresh.");return;}
+   if(sprintCache.TryGetValue(iteration.Path,out var hit))items=[..hit];
+   else if(!previousIterationPath.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase))items=[];
+   previousItems=[];related=[];await InvokeAsync(StateHasChanged);
+   var fetched=await Tracker.SprintAsync(iteration.Path,ct);
+   try{sprintCapacity=await Tracker.CapacityAsync(iteration.Id,ct);capacityByIteration[iteration.Id]=sprintCapacity;}catch(TrackerException){sprintCapacity=new([],[]);}
+   ct.ThrowIfCancellationRequested();items=fetched.ToList();loadedSprintPath=iteration.Path;sprintCache[iteration.Path]=[..items];
+   if(quickView=="Carry-over"||screen=="cleanup")await LoadPrevious(ct);if(screen=="cleanup")await LoadRelated(ct);
+  }catch(OperationCanceledException){
+   if(!ct.IsCancellationRequested){if(targetPath is not null&&previousIterationPath.Equals(targetPath,StringComparison.OrdinalIgnoreCase)&&items.Count==0&&previousItemsSnapshot.Count>0)items=previousItemsSnapshot;Notify("Refresh timed out. Keeping the last loaded sprint data; try again.");}
+  }catch(Exception e){
+   if(!ct.IsCancellationRequested){if(targetPath is not null&&previousIterationPath.Equals(targetPath,StringComparison.OrdinalIgnoreCase)&&items.Count==0&&previousItemsSnapshot.Count>0)items=previousItemsSnapshot;Error(e);}
+  }finally{if(!ct.IsCancellationRequested)loading=false;}
+ }
  async Task LoadFutureCapacities(CancellationToken ct){if(meta is null)return;var today=DateTimeOffset.Now.Date;var horizon=today.AddMonths(6);var future=meta.Iterations.Where(i=>i.Start is not null&&i.Finish is not null&&i.Finish.Value.Date>=today&&i.Start.Value.Date<=horizon).OrderBy(i=>i.Start).Take(16).ToArray();foreach(var iteration in future){ct.ThrowIfCancellationRequested();if(capacityByIteration.ContainsKey(iteration.Id))continue;try{capacityByIteration[iteration.Id]=await Tracker.CapacityAsync(iteration.Id,ct);}catch(TrackerException){}}}
  async Task LoadPrevious(CancellationToken ct){var previous=meta?.Iterations.ElementAtOrDefault(sprintIndex-1);if(previous is null){previousItems=[];return;}previousItems=(await Tracker.SprintAsync(previous.Path,ct)).ToList();}
  async Task LoadRelated(CancellationToken ct){var ids=items.Where(w=>Quality.Finished(w,meta!)).SelectMany(w=>w.Children).Except(AllLoaded.Select(w=>w.Id)).ToArray();var list=new List<WorkItem>();foreach(var id in ids)list.Add(await Tracker.GetAsync(id,ct));related=list;}
@@ -187,6 +213,36 @@ public partial class Home {
   }).ToList();
  }
  string TimeOffDateText(DateOnly day)=>day.Year==DateTime.Now.Year?day.ToString("MMM d"):day.ToString("MMM d, yyyy");
+ sealed record TeamTimeOffRow(DateOnly Date,string[] People,string Reason,string[] Sources);
+ IReadOnlyList<TeamTimeOffRow> TeamTimeOffRows(){
+  var today=DateOnly.FromDateTime(DateTime.Now);
+  var rows=new Dictionary<(DateOnly Date,string Reason),(HashSet<string> People,HashSet<string> Sources)>();
+  void Add(DateOnly day,IEnumerable<string> people,string reason,string? source=null){
+   if(day<today||day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)return;
+   var key=(day,reason);
+   if(!rows.TryGetValue(key,out var row)){row=(new(StringComparer.OrdinalIgnoreCase),new(StringComparer.OrdinalIgnoreCase));rows[key]=row;}
+   foreach(var person in people.Where(p=>!string.IsNullOrWhiteSpace(p)))row.People.Add(person.Trim());
+   if(!string.IsNullOrWhiteSpace(source))row.Sources.Add(source.Trim());
+  }
+  foreach(var leave in UpcomingDaysOff()){
+   var from=DateOnly.FromDateTime(leave.Range.Start.Date);if(from<today)from=today;
+   var to=DateOnly.FromDateTime(leave.Range.End.Date);
+   for(var day=from;day<=to;day=day.AddDays(1))Add(day,[leave.Name],"Day off");
+  }
+  if(meta is not null)foreach(var holiday in UpcomingHolidays()){
+   var people=meta.People.Where(p=>AssignedHolidayCalendars(p.Id).Contains(holiday.CountryCode,StringComparer.OrdinalIgnoreCase)).Select(p=>p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+   if(people.Length==0)continue;
+   var from=holiday.Start<today?today:holiday.Start;
+   for(var day=from;day<=holiday.End;day=day.AddDays(1))Add(day,people,holiday.Name,holiday.Country);
+  }
+  return rows.OrderBy(x=>x.Key.Date).ThenBy(x=>x.Key.Reason,StringComparer.OrdinalIgnoreCase)
+   .Select(x=>new TeamTimeOffRow(x.Key.Date,x.Value.People.Order(StringComparer.OrdinalIgnoreCase).ToArray(),x.Key.Reason,x.Value.Sources.Order(StringComparer.OrdinalIgnoreCase).ToArray())).ToList();
+ }
+ IReadOnlyList<TeamTimeOffRow> VisibleTeamTimeOff(){var rows=TeamTimeOffRows();return showAllDaysOff?rows:rows.Take(4).ToList();}
+ int HiddenTeamTimeOffCount()=>Math.Max(0,TeamTimeOffRows().Count-VisibleTeamTimeOff().Count);
+ string TimeOffPeopleText(string[] people)=>people.Length<=3?string.Join(", ",people):$"{string.Join(", ",people.Take(3))} +{people.Length-3}";
+ bool InSelectedSprint(DateOnly day)=>CurrentSprint?.Start is {} start&&CurrentSprint.Finish is {} finish&&day>=DateOnly.FromDateTime(start.Date)&&day<=DateOnly.FromDateTime(finish.Date);
+
  sealed record HolidayCountry(string Code,string Name,string ApiCode,string? Subdivision=null);
  static readonly HolidayCountry[] HolidayCountries=[
   new("BE","Belgium","BE"),
@@ -252,6 +308,7 @@ public partial class Home {
     for(var day=holiday.Start;day<=holiday.End;day=day.AddDays(1))if(day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)dates.Add(day);
   return dates;
  }
+ int RemainingUnavailableWorkingDays(string personId,Iteration iteration){var today=DateOnly.FromDateTime(DateTime.Now);return UnavailableWorkingDates(personId,iteration).Count(day=>day>=today);}
  bool Blocked(WorkItem w)=>w.Tags.Any(t=>prefs.BlockedTags.Contains(t,StringComparer.OrdinalIgnoreCase));
  int WorkGroupRank(WorkItem w)=>meta is not null&&Quality.Finished(w,meta)?0:Blocked(w)?1:2;
  string WorkGroupName(WorkItem w)=>WorkGroupRank(w) switch{0=>"Done",1=>"Blocked",_=>"Active"};
@@ -285,7 +342,7 @@ public partial class Home {
  bool HasInitiativeTag(WorkItem w){var tags=InitiativeTags();return tags.Length>0&&tags.Any(t=>w.Tags.Contains(t,StringComparer.OrdinalIgnoreCase));}
  sealed record AttentionRow(string Key,string Label,int Count,string Hint);
  sealed record HomeGroup(string Name,int Count,double Effort);
- sealed record CapacityRow(string Id,string Name,int Count,double Effort,int MissingEstimates,double CapacityHours,int Percent,string Status,DateRange? NextLeave);
+ sealed record CapacityRow(string Id,string Name,int Count,double Effort,int MissingEstimates,double CapacityHours,int Percent,string Status,DateRange? NextLeave,int UnavailableDays);
  sealed record InitiativeRow(string Tag,int Count,double Effort,InitiativeMetadata Meta,bool NeedsAttention);
  sealed record SmartOrderRow(int Position,WorkItem Item,string Owner,string Group);
  sealed class MeetingImport {public string[] Summary {get;set;}=[];public string[] Decisions {get;set;}=[];public List<MeetingActionInput> Actions {get;set;}=[];}
@@ -306,7 +363,7 @@ public partial class Home {
  bool MissingEstimateForOpenWork(WorkItem w)=>meta is not null&&!Quality.Finished(w,meta)&&Planning.Estimate(w,PlanningPrefs) is null;
  IReadOnlyList<AttentionRow> HomeAttention(){var rows=CurrentOpenItems.ToArray();var list=new List<AttentionRow>();void Add(string key,string label,int count,string hint){if(count>0)list.Add(new(key,label,count,hint));}Add("blocked","Blocked work",rows.Count(Blocked),"Needs an unblock or dependency decision");Add("unassigned","Unassigned",rows.Count(w=>w.OwnerId==""),"Give the work a clear owner");Add("missing-estimate","Missing estimates",rows.Count(MissingEstimateForOpenWork),"Estimate these items before relying on sprint capacity");if(ApplicationTags().Length>0)Add("missing-app","Missing application tag",rows.Count(w=>!HasApplicationTag(w)),"Classify work so application load stays useful");Add("stale","Stagnating work",rows.Count(w=>w.Changed!=default&&w.Changed<DateTimeOffset.UtcNow.AddDays(-prefs.StaleDays)),$"No change for more than {prefs.StaleDays} days");if(prefs.RepositoryMonitoringEnabled){Add("repo-pr","Stale pull requests",repositoryAttention.Count(x=>x.Key=="repo-pr"),"Review stale active pull requests in the selected project");Add("repo-merged","Merged branches",repositoryAttention.Count(x=>x.Key=="repo-merged"),"Review merged branches that are still present");Add("repo-orphan","Old branches without PRs",repositoryAttention.Count(x=>x.Key=="repo-orphan"),"Review old branches with no pull-request signal");}return list;}
  List<HomeGroup> Remaining(TagDimension dimension){var configured=PlanningPrefs.Tags.Where(t=>dimension==TagDimension.Application?t.Application:t.Initiative).Where(t=>!prefs.MyScopeOnly||(dimension==TagDimension.Application?t.ApplicationMyScope:t.InitiativeMyScope)).Select(t=>t.Tag).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();return configured.Select(tag=>{var rows=OpenPlanningItems.Where(w=>w.Tags.Contains(tag,StringComparer.OrdinalIgnoreCase)).ToArray();return new HomeGroup(tag,rows.Length,rows.Sum(w=>Planning.Estimate(w,PlanningPrefs)??0));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Count).ThenBy(x=>x.Name).ToList();}
- List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":effort>capacity?"Over capacity":missing>0?"Estimates missing":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration));}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
+ List<CapacityRow> CapacityRowsFor(Iteration? iteration){if(meta is null||iteration is null)return [];var open=OpenPlanningItems.Where(w=>w.Iteration.Equals(iteration.Path,StringComparison.OrdinalIgnoreCase)).ToArray();return meta.People.Select(p=>{var rows=open.Where(w=>w.OwnerId==p.Id).ToArray();var estimates=rows.Select(w=>Planning.Estimate(w,PlanningPrefs)).ToArray();var effort=estimates.Sum(x=>x??0);var missing=estimates.Count(x=>x is null);var capacity=PlannedCapacityHours(p.Id,iteration);var unavailable=RemainingUnavailableWorkingDays(p.Id,iteration);var percent=!PlanningPrefs.EstimatesAreHours?0:capacity<=0?(effort>0?101:0):(int)Math.Round(100*effort/capacity);var status=!PlanningPrefs.EstimatesAreHours?"Enable hour estimates":effort>capacity?"Over capacity":missing>0?"Estimates missing":capacity<=0?"Sprint time elapsed":effort>=capacity*.85?"Nearly full":"Room available";return new CapacityRow(p.Id,p.Name,rows.Length,effort,missing,capacity,percent,status,NextDaysOff(p.Id,iteration),unavailable);}).Where(x=>x.Count>0).OrderByDescending(x=>x.Percent).ThenBy(x=>x.Name).ToList();}
  string CapacityLoadText(CapacityRow row){if(!PlanningPrefs.EstimatesAreHours)return "Hour comparison off";if(row.CapacityHours<=0)return row.Effort>0?$"{row.Percent}% · no capacity":"0%";var delta=row.Effort-row.CapacityHours;var unknown=row.MissingEstimates>0?" + unknown":"";return delta>0?$"{row.Percent}% · +{delta:0.#}h{unknown}":$"{row.Percent}% · {Math.Max(0,-delta):0.#}h left{unknown}";}
  int CapacityFillPercent(CapacityRow row)=>Math.Clamp(row.Percent,0,100);
  int CapacityOveragePercent(CapacityRow row)=>Math.Clamp(row.Percent-100,0,100);
