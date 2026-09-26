@@ -71,8 +71,8 @@ public sealed class DemoTracker:IWorkTracker {
  public Task<IReadOnlyList<EnvironmentDeployment>> EnvironmentDeploymentsAsync(string project,int environmentId,int days=14,CancellationToken ct=default){
   var now=DateTimeOffset.UtcNow;
   return Task.FromResult<IReadOnlyList<EnvironmentDeployment>>([
-   new(environmentId*100+1,environmentId,"Deploy application",$"202609{environmentId}.1","main","completed","succeeded",now.AddDays(-environmentId).AddMinutes(-15),now.AddDays(-environmentId),"https://dev.azure.com/example/demo/_build/results"),
-   new(environmentId*100+2,environmentId,"Deploy application",$"202609{environmentId}.0","release","completed",environmentId==2?"failed":"succeeded",now.AddDays(-environmentId-3).AddMinutes(-20),now.AddDays(-environmentId-3),"https://dev.azure.com/example/demo/_build/results")
+   new(environmentId*100+1,environmentId,"Deploy application",$"202609{environmentId}.1","main","Deploy","Deploy application","completed","succeeded",now.AddDays(-environmentId).AddMinutes(-15),now.AddDays(-environmentId),"https://dev.azure.com/example/demo/_build/results"),
+   new(environmentId*100+2,environmentId,"Deploy application",$"202609{environmentId}.0","release","Deploy","Smoke test","completed",environmentId==2?"failed":"succeeded",now.AddDays(-environmentId-3).AddMinutes(-20),now.AddDays(-environmentId-3),"https://dev.azure.com/example/demo/_build/results")
   ]);
  }
  public Task<IReadOnlyList<PipelineDefinition>> PipelinesAsync(string project,CancellationToken ct=default)=>Task.FromResult<IReadOnlyList<PipelineDefinition>>(Array.Empty<PipelineDefinition>());
