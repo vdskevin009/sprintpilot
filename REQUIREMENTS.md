@@ -95,6 +95,20 @@ Rules:
 | SP-TECH-002 | Integration tests must remain simulated and must not contact a live Azure DevOps tenant. | Verified | Current harness behavior. |
 | SP-TECH-003 | AVD-specific browser, credential-manager and tenant interactions still require explicit acceptance testing. | Accepted | Current delivery limitation. |
 
+## Current interaction and delivery requirements
+
+| ID | Requirement | Status | Implementation notes |
+|---|---|---|---|
+| SP-WS-008 | Sprint ordering is iteration-local and must match Azure DevOps sprint backlog order. Users must be able to reorder with drag/drop and explicit up/down controls, with the change persisted back to Azure DevOps. | Implemented | Current grid exposes drag/drop plus ↑/↓ controls and writes sprint order; real AVD acceptance is still required. |
+| SP-DAILY-001 | Daily is a mode of Sprint Workspace rather than a separate disconnected navigation experience; it must keep active work and recently closed work in the same people-first workflow. | Implemented | Current routing maps Daily into the workspace mode. |
+| SP-DAILY-002 | “Recently closed” must be based on the latest genuine transition into a completed state, use a rolling 36-hour window, exclude reopened items/later non-completion edits, and must not silently fall back to ChangedDate when history cannot be read. | Accepted | Outstanding mismatch: current baseline still derives recently-closed counts from finished state + work-item Changed timestamp. |
+| SP-PIPE-001 | Pipeline Factory must create many YAML pipelines without repeating the Azure DevOps wizard: select project/repository/branch, discover YAML files, and skip definitions that already exist. | Implemented | Current Pipeline Factory page and tracker ports. |
+| SP-PIPE-002 | Home must show pipeline/stage activity and pending approvals for a user-selectable Azure DevOps project, with direct approval when the caller has permission. | Implemented | Current pipeline activity card. |
+| SP-PIPE-003 | Active pull-request status and pipeline activity must use the same remembered delivery-project selection; switching the project in one surface updates the other. | Implemented | Current shared delivery project selection. |
+| SP-UI-001 | Keep the existing controls/options while making wide-screen workspaces denser, giving titles more room, and supporting a persistent AVD-friendly theme that avoids remote-desktop compression artifacts. | Implemented | Current compact/wide layout and persisted AVD theme; real-device visual acceptance remains required. |
+| SP-CAP-001 | Capacity/time-off views must be people-first and include Azure DevOps days off plus public-holiday context for Belgium, Canada/Québec, Poland, Czechia and Germany, without hiding people simply because they have no assigned work. | Accepted | Holiday sources are present; zero-work visibility/capacity behavior should remain covered by acceptance tests. |
+| SP-MEET-001 | Meetings workflow should turn notes into a structured Copilot prompt, import/review the structured result, and create selected work items in current/next sprint with owner, tags, estimate, description and acceptance criteria using the existing Azure DevOps connection. | Implemented | Current meeting actions create reviewed work items without a second login. |
+
 ## Open questions / Needs confirmation
 
 - None recorded at baseline. Add unresolved requests here rather than guessing.
