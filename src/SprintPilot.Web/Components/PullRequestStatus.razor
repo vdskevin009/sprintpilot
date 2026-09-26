@@ -1,0 +1,85 @@
+@inject TrackerSession Tracker
+@implements IDisposable
+
+<section class="home-card pr-status-card" aria-label="Pull request status by application">
+<header><div><span class="eyebrow">Code flow</span><h2>Active pull requests <span class="home-card-count">@AllPullRequests.Count</span></h2><small>@(MyScopeOnly?"My Scope applications":"Repositories in the selected project")</small></div><button disabled="@loading" @onclick="Load">↻ Refresh</button></header>
+@if(loading){<div class="repository-monitor-status">Loading active pull requests…</div>}
+@if(error!=""){<div class="repository-monitor-status muted">@error</div>}
+@if(!loading&&Groups.Count==0){<div class="home-empty">No active pull requests found.</div>}
+@if(Groups.Count>0){<div class="pr-app-grid">
+ @foreach(var group in Groups){
+  <button class="pr-app-card" @onclick="()=>OpenGroup(group)">
+   <span><strong>@group.Application</strong><small>@group.Items.Count active</small></span>
+   <span class="pr-status-badges">
+    <i>@group.Items.Count open</i>
+    @if(group.Draft>0){<i>@group.Draft draft</i>}
+    @if(group.Blocked>0){<i class="failed">@group.Blocked blocked</i>}
+    @if(group.Ready>0){<i class="ready">@group.Ready ready</i>}
+   </span>
+  </button>
+ }
+</div>}
+</section>
+
+@if(selectedGroup is {} selected){
+<div class="scrim" @onclick="Close"><section class="dialog wide pr-status-dialog" role="dialog" aria-modal="true" aria-label="Pull requests" @onclick:stopPropagation>
+<header><div><h2>@selected.Application</h2><small>@selected.Items.Count active pull request(s)</small></div><button aria-label="Close" @onclick="Close">×</button></header>
+<div class="pr-modal-layout">
+ <div class="pr-modal-list">
+ @foreach(var pr in selected.Items){
+  <button class="@(selectedPr?.Id==pr.Id?"active":"")" @onclick="()=>selectedPr=pr">
+   <span><strong>#@pr.Id · @pr.Title</strong><small>@pr.SourceBranch → @pr.TargetBranch</small></span>
+   <em class="@(Blocked(pr)?"failed":Ready(pr)?"ready":"")">@PrState(pr)</em>
+  </button>
+ }
+ </div>
+ @if(selectedPr is {} p){
+ <div class="pr-modal-detail">
+  <div><span class="eyebrow">Pull request #@p.Id</span><h3>@p.Title</h3><p>@p.SourceBranch → @p.TargetBranch</p></div>
+  <dl><div><dt>Author</dt><dd>@p.Creator</dd></div><div><dt>Reviewers</dt><dd>@p.ReviewerCount</dd></div><div><dt>Approvals</dt><dd>@p.ApprovalCount</dd></div><div><dt>Blocking votes</dt><dd>@p.BlockingVoteCount</dd></div><div><dt>Merge status</dt><dd>@p.MergeStatus</dd></div><div><dt>Created</dt><dd>@p.CreatedDate.ToLocalTime().ToString("MMM d, yyyy")</dd></div></dl>
+  @if(SafeLink(p.Url)){<a class="primary link-button" href="@p.Url" target="_blank" rel="noopener noreferrer">Open pull request ↗</a>}
+ </div>}
+</div>
+</section></div>
+}
+
+@code {
+ [Parameter] public string Project{get;set;}="";
+ [Parameter] public bool MyScopeOnly{get;set;}
+ [Parameter] public string[] ScopeApplications{get;set;}=[];
+ readonly CancellationTokenSource lifetime=new();
+ bool loading,disposed;string error="";List<AppPrGroup> Groups=[];AppPrGroup? selectedGroup;GitPullRequest? selectedPr;
+ List<GitPullRequest> AllPullRequests=>Groups.SelectMany(x=>x.Items).ToList();
+ protected override Task OnInitializedAsync()=>Load();
+ protected override async Task OnParametersSetAsync(){if(!loading&&Groups.Count>0)ApplyScope();await Task.CompletedTask;}
+ async Task Load(){
+  if(loading||disposed||string.IsNullOrWhiteSpace(Project))return;loading=true;error="";selectedGroup=null;selectedPr=null;
+  try{
+   var repos=await Tracker.RepositoriesAsync(Project,lifetime.Token);var groups=new List<AppPrGroup>();
+   foreach(var repo in repos){
+    lifetime.Token.ThrowIfCancellationRequested();
+    try{
+     var prs=(await Tracker.PullRequestsAsync(Project,repo.Id,lifetime.Token)).OrderByDescending(x=>x.CreatedDate).ToList();
+     if(prs.Count>0)groups.Add(Build(repo.Name,prs));
+    }catch(TrackerException e){if(error=="")error=$"{repo.Name}: {e.Message}";}
+   }
+   Groups=groups;ApplyScope();
+  }catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
+  catch(Exception e){error=e is TrackerException?e.Message:"Pull requests could not be loaded.";}
+  finally{loading=false;}
+ }
+ AppPrGroup Build(string application,List<GitPullRequest> items)=>new(application,items,items.Count(x=>x.IsDraft),items.Count(Blocked),items.Count(Ready));
+ void ApplyScope(){
+  if(!MyScopeOnly||ScopeApplications.Length==0){Groups=Groups.OrderByDescending(x=>x.Items.Count).ThenBy(x=>x.Application).ToList();return;}
+  var matches=Groups.Where(g=>ScopeApplications.Any(a=>g.Application.Equals(a,StringComparison.OrdinalIgnoreCase)||g.Application.Contains(a,StringComparison.OrdinalIgnoreCase)||a.Contains(g.Application,StringComparison.OrdinalIgnoreCase))).ToList();
+  Groups=matches.OrderByDescending(x=>x.Items.Count).ThenBy(x=>x.Application).ToList();
+ }
+ static bool Blocked(GitPullRequest p)=>p.BlockingVoteCount>0||p.MergeStatus.Contains("conflict",StringComparison.OrdinalIgnoreCase)||p.MergeStatus.Contains("failure",StringComparison.OrdinalIgnoreCase)||p.MergeStatus.Contains("rejected",StringComparison.OrdinalIgnoreCase);
+ static bool Ready(GitPullRequest p)=>!p.IsDraft&&!Blocked(p)&&p.ApprovalCount>0;
+ static string PrState(GitPullRequest p)=>p.IsDraft?"Draft":Blocked(p)?"Blocked":Ready(p)?"Ready":"Review";
+ void OpenGroup(AppPrGroup group){selectedGroup=group;selectedPr=group.Items.FirstOrDefault();}
+ void Close(){selectedGroup=null;selectedPr=null;}
+ static bool SafeLink(string url)=>Uri.TryCreate(url,UriKind.Absolute,out var uri)&&uri.Scheme=="https"&&(uri.Host=="dev.azure.com"||uri.Host.EndsWith(".visualstudio.com",StringComparison.OrdinalIgnoreCase));
+ sealed record AppPrGroup(string Application,List<GitPullRequest> Items,int Draft,int Blocked,int Ready);
+ public void Dispose(){disposed=true;lifetime.Cancel();lifetime.Dispose();}
+}
