@@ -55,6 +55,8 @@
 @code {
  [Parameter] public string Project{get;set;}="";
  [Parameter] public string Organization{get;set;}="";
+ [Parameter] public string SelectedProject{get;set;}="";
+ [Parameter] public EventCallback<string> SelectedProjectChanged{get;set;}
  string selectedProjectId="",selectionNotice="",error="",warning="",message="",approvingId="";
  bool loading,approving,disposed;
  List<AzureProject> projects=[];
@@ -63,18 +65,24 @@
  PipelineRunSummary? selectedRun;
  readonly CancellationTokenSource lifetime=new();
  protected override Task OnInitializedAsync()=>RefreshApprovals();
+ protected override async Task OnParametersSetAsync(){
+  if(disposed||loading||approving||string.IsNullOrWhiteSpace(SelectedProject)||SelectedProject==selectedProjectId||projects.Count==0)return;
+  if(!projects.Any(p=>p.Id.Equals(SelectedProject,StringComparison.OrdinalIgnoreCase)))return;
+  selectedProjectId=SelectedProject;message="";selectionNotice="";rows=[];activity=new([],[]);await Load();
+ }
  public async Task RefreshApprovals(){
   if(loading||approving||disposed)return;
   loading=true;error="";rows=[];warning="";activity=new([],[]);
   try{
    projects=(await Tracker.ProjectsAsync(lifetime.Token)).OrderBy(p=>p.Name,StringComparer.OrdinalIgnoreCase).ToList();
-   var remembered=selectedProjectId!=""?selectedProjectId:Tracker.Demo?null:await SelectionStore.LoadAsync(Organization,lifetime.Token);
+   var remembered=!string.IsNullOrWhiteSpace(SelectedProject)?SelectedProject:selectedProjectId!=""?selectedProjectId:Tracker.Demo?null:await SelectionStore.LoadAsync(Organization,lifetime.Token);
    var chosen=projects.FirstOrDefault(p=>p.Id.Equals(remembered,StringComparison.OrdinalIgnoreCase));
    if(chosen is null){
     chosen=projects.FirstOrDefault(p=>p.Id.Equals(Project,StringComparison.OrdinalIgnoreCase)||p.Name.Equals(Project,StringComparison.OrdinalIgnoreCase))??projects.FirstOrDefault();
     if(!string.IsNullOrEmpty(remembered))selectionNotice="The saved project is no longer accessible. Choose an available project.";
    }
    selectedProjectId=chosen?.Id??"";
+   if(selectedProjectId!=""&&SelectedProject!=selectedProjectId)await SelectedProjectChanged.InvokeAsync(selectedProjectId);
   }catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
   catch(Exception e){error=e is TrackerException?e.Message:"Projects or the saved selection could not be loaded. Refresh to try again.";}
   finally{loading=false;}
@@ -85,6 +93,7 @@
   var id=e.Value?.ToString()??"";
   if(!projects.Any(p=>p.Id==id))return;
   selectedProjectId=id;message="";selectionNotice="";rows=[];activity=new([],[]);
+  if(SelectedProject!=id)await SelectedProjectChanged.InvokeAsync(id);
   loading=true;
   try{if(!Tracker.Demo)await SelectionStore.SaveAsync(Organization,id,lifetime.Token);}
   catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
