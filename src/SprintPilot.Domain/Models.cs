@@ -46,6 +46,7 @@ public sealed class Credentials(ConnectionInfo connection,string token) {
 public record WorkTemplate(string Name,string Description,string Acceptance,string Tags,string Area);
 public record SavedView(string Name,Dictionary<string,string> Filters,string[] Columns);
 public sealed record WorkItemComment(int Id,string Text,string Author,DateTimeOffset Created);
+public sealed record ManualDayOff(string Id,string PersonId,DateTimeOffset Start,DateTimeOffset End,string Note="");
 public sealed class InitiativeMetadata {
  public DateOnly? DueDate {get;set;}
  public string Status {get;set;}="Ongoing";
@@ -63,6 +64,13 @@ public sealed class Preferences {
  public bool RepositoryMonitoringEnabled {get;set;}=true;
  public string[] BlockedTags {get;set;}=["Blocked by External Dependency","Waiting Feedback Business"];
  public Dictionary<string,InitiativeMetadata> InitiativeMetadata {get;set;}=new(StringComparer.OrdinalIgnoreCase);
+ public bool MyScopeOnly {get;set;}
+ public string LastBacklogOwner {get;set;}="";
+ public List<ManualDayOff> ManualDaysOff {get;set;}=[];
+ // Three selected Azure DevOps environment IDs per project.
+ public Dictionary<string,string[]> EnvironmentSlotsByProject {get;set;}=new(StringComparer.OrdinalIgnoreCase);
+ // Optional coordination owner/admin label by environment ID when Azure DevOps does not expose ACLs through the PAT.
+ public Dictionary<string,string> EnvironmentAdminById {get;set;}=new(StringComparer.OrdinalIgnoreCase);
  public string[] Columns {get;set;}=["Order","ID","Type","Title","Owner","State","Iteration","Estimate","Tags"];
  public List<SavedView> Views {get;set;}=[];
  public List<WorkTemplate> Templates {get;set;}=[new("Feature","Goal:\n\nContext:","Given … when … then …\n\nTesting:","", ""),new("Bug","Actual behavior:\n\nExpected behavior:\n\nSteps to reproduce:\n\nEnvironment:","Regression test:","Bug", ""),new("Disaster Recovery","Goal:\n\nRecovery scope:\n\nDependencies:\n\nRollback:","Recovery validation:\n\nTesting:","DR", ""),new("Technical Task","Goal:\n\nImplementation notes:\n\nDependencies:","Done when:\n\nTesting:","Technical", ""),new("Deployment","Target environment:\n\nDeployment steps:\n\nRollback:","Smoke tests:\n\nVerification:","Deployment", ""),new("Database Change","Schema or data change:\n\nCompatibility:\n\nRollback:","Migration validation:\n\nTesting:","Database", ""),new("Migration","Source:\n\nTarget:\n\nMapping:\n\nRecovery:","Reconciliation:\n\nTesting:","Migration", ""),new("API Change","Endpoint:\n\nContract change:\n\nCompatibility:","Contract tests:\n\nError scenarios:","API", "")];
